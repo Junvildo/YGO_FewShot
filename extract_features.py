@@ -10,14 +10,13 @@ def extract_feature(model, loader, device):
     Extract embeddings from given `model` for given `loader` dataset on `device`.
     """
     model.eval()
-    model = reparameterize_model(model)
 
     all_embeddings = []
     all_labels = []
     log_every_n_step = 10
 
     with torch.no_grad():
-        for i, (im, class_label, instance_label, index) in enumerate(loader):
+        for i, (im, instance_label) in enumerate(loader):
             im = im.to(device=device)
             embedding = model(im)
 
