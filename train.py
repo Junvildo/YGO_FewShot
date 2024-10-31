@@ -42,23 +42,23 @@ def parse_args():
     """
     parser = ArgumentParser(description="PyTorch metric learning training script")
     # Optional arguments for the launch helper
-    parser.add_argument("--dataset_root", type=str, default="",
+    parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
-    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
+    parser.add_argument("--batch_size", type=int, default=2, help="Batch size for training")
     parser.add_argument("--img_size", type=int, default=7, help="Image size for training")
-    parser.add_argument("--model_variant", type=str, default="s0", help="MobileOne variant (s0, s1, s2, s3, s4)")
+    parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
-    parser.add_argument("--class_balancing", default=False, action='store_true', help="Use class balancing")
-    parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
+    parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
+    parser.add_argument("--images_per_class", type=int, default=2, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
 
-    parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
-    parser.add_argument("--epochs_per_step", type=int, default=4, help="Epochs for learning rate step")
-    parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
-    parser.add_argument("--num_steps", type=int, default=3, help="Num steps to take")
-    parser.add_argument("--output", type=str, default="output", help="The output folder for training")
+    parser.add_argument("--test_every_n_epochs", type=int, default=1, help="Tests every N epochs")
+    parser.add_argument("--epochs_per_step", type=int, default=1, help="Epochs for learning rate step")
+    parser.add_argument("--pretrain_epochs", type=int, default=5, help="Epochs for pretraining")
+    parser.add_argument("--num_steps", type=int, default=1, help="Num steps to take")
+    parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
 
     return parser.parse_args()
 
@@ -74,8 +74,8 @@ def main():
     args = parse_args()
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    output_directory = os.path.join(args.output, args.dataset, str(args.dim),
-                                    '_'.join([args.model_name, str(args.batch_size)]))
+    output_directory = os.path.join(args.output, str(args.dim),
+                                    '_'.join([args.model_variant, str(args.batch_size)]))
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
     out_log = os.path.join(output_directory, "train.log")
@@ -108,15 +108,15 @@ def main():
     ])
 
     # Setup dataset
-    train_dataset = CustomDataset(root=args.data_root, train=True, transform=train_transform)
-    eval_dataset = CustomDataset(root=args.data_root, train=False, transform=eval_transform)
+    train_dataset = CustomDataset(root=args.dataset_root, train=True, transform=train_transform)
+    eval_dataset = CustomDataset(root=args.dataset_root, train=False, transform=eval_transform)
 
     # Setup dataset loader
     if args.class_balancing:
         print("Class Balancing")
-        sampler = ClassBalancedBatchSampler(train_dataset.instance_labels, args.batch_size, args.images_per_class)
+        train_sampler = ClassBalancedBatchSampler(train_dataset.instance_labels, args.batch_size, args.images_per_class)
         train_loader = DataLoader(train_dataset,
-                                  batch_sampler=sampler, num_workers=4,
+                                  batch_sampler=train_sampler, num_workers=4,
                                   pin_memory=True, drop_last=False, collate_fn=default_collate)
     else:
         print("No class balancing")
@@ -176,4 +176,7 @@ def main():
 
         eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
         embeddings, labels = extract_feature(model, eval_loader, device)
-        evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000, gpu_id=0)
+        evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+
+if __name__ == '__main__':
+    main()
