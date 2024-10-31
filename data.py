@@ -33,13 +33,16 @@ class Dataset(object):
         assert len(self.class_labels) == len(self.image_paths), "Mismatch between image paths and class labels."
 
     @property
+    @abstractmethod
     def name(self):
         raise NotImplementedError("Subclasses should implement this!")
 
     @property
+    @abstractmethod
     def image_root_dir(self):
         raise NotImplementedError("Subclasses should implement this!")
 
+    @property
     @abstractmethod
     def _load(self):
         raise NotImplementedError("Subclasses should implement this!")
