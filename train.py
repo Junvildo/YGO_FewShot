@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training")
-    parser.add_argument("--img_size", type=int, default=7, help="Image size for training")
+    parser.add_argument("--img_size", type=int, default=28, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
@@ -54,10 +54,10 @@ def parse_args():
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
-    parser.add_argument("--test_every_n_epochs", type=int, default=1, help="Tests every N epochs")
-    parser.add_argument("--epochs_per_step", type=int, default=1, help="Epochs for learning rate step")
-    parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
-    parser.add_argument("--num_steps", type=int, default=1, help="Num steps to take")
+    parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
+    parser.add_argument("--epochs_per_step", type=int, default=4, help="Epochs for learning rate step")
+    parser.add_argument("--pretrain_epochs", type=int, default=5, help="Epochs for pretraining")
+    parser.add_argument("--num_steps", type=int, default=3, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
 
@@ -159,7 +159,10 @@ def main():
     finetune_max_f, finetune_max_b = [], []
 
     log_every_n_step = 10
+    print("Start pretraining for {} epochs".format(args.pretrain_epochs))
+    print("="*80)
     for epoch in range(args.pretrain_epochs):
+        begin = time.time()
         for i, (im, _, instance_label, index) in enumerate(train_loader):
             data = time.time()
             opt.zero_grad()
@@ -180,7 +183,11 @@ def main():
             if (i + 1) % log_every_n_step == 0:
                 log_and_print(f'Epoch {args.pretrain_epochs - epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)}:\t{loss.item()}', log_file)
                 log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
-
+        finish = time.time()
+        remaining_epochs = args.pretrain_epochs - epoch - 1
+        estimate_finish_time = round((finish - begin) * remaining_epochs, 5)
+        print(f'Pretrain: Epoch {args.pretrain_epochs - epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n')
+        log_and_print(f'Pretrain: Epoch {args.pretrain_epochs - epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
         eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
         embeddings, labels = extract_feature(model, eval_loader, device)
         max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=50)
@@ -188,11 +195,15 @@ def main():
             # Store max_f and max_b
         pretrain_max_f.append(max_f)
         pretrain_max_b.append(max_b)
+    print("="*80)
+    print("Pretraining finished")
 
     # Full end-to-end finetune of all parameters
     opt = torch.optim.SGD(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, momentum=0.9, weight_decay=1e-4)
-
+    print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
+    print("="*80)
     for epoch in range(args.epochs_per_step * args.num_steps):
+        begin = time.time()
         log_and_print(f'Output Directory: {output_directory}', log_file)
         adjust_learning_rate(opt, epoch, args.epochs_per_step, gamma=args.gamma)
 
@@ -218,6 +229,10 @@ def main():
                 log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)}:\t{loss.item()}', log_file)
                 log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
 
+        finish = time.time()
+        remaining_epochs = (args.epochs_per_step * args.num_steps) - epoch - 1
+        estimate_finish_time = round((finish - begin) * remaining_epochs, 5)
+        log_and_print(f'Finetune: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
         snapshot_path = os.path.join(output_directory, 'epoch_{}.pth'.format(epoch + 1))
         torch.save(model.state_dict(), snapshot_path)
 
@@ -229,6 +244,8 @@ def main():
             # Store max_f and max_b
             finetune_max_f.append(max_f)
             finetune_max_b.append(max_b)
+    print("="*80)
+    print("Finetuning finished")
     log_file.close()
 
     # Save plots
