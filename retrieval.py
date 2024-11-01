@@ -82,28 +82,20 @@ def evaluate_recall_at_k(dists, results, query_labels, db_labels, k):
 def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query_labels, db_labels,
                                           output, k=1000):
     """
-        Wrapper function to evaluate Recall@k for float and binary embeddings
-        Outputs recall@k strings for Cars, CUBS, Stanford Online Product, and InShop datasets
+        Wrapper function to evaluate Recall@k for float and binary embeddings.
+        Outputs recall@k strings for general datasets.
     """
     # Float embedding evaluation
     dists, retrieved_result_indices = _retrieve_knn_faiss_inner_product(query_embeddings, db_embeddings, k)
     r_at_k_f = evaluate_recall_at_k(dists, retrieved_result_indices, query_labels, db_labels, k)
 
     output_file = output + '_identity.eval'
-    cars_cub_eval_str = "R@1, R@2, R@4, R@8: {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
-        r_at_k_f[0], r_at_k_f[1], r_at_k_f[3], r_at_k_f[7])
-    sop_eval_str = "R@1, R@10, R@100, R@1000: {:.2f} & {:.2f} & {:.2f} & {:.2f}  \\\\".format(
-        r_at_k_f[0], r_at_k_f[9], r_at_k_f[99], r_at_k_f[999])
-    in_shop_eval_str = "R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
+    general_eval_str = "R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
         r_at_k_f[0], r_at_k_f[9], r_at_k_f[19], r_at_k_f[29], r_at_k_f[39], r_at_k_f[49])
 
-    print(cars_cub_eval_str)
-    print(sop_eval_str)
-    print(in_shop_eval_str)
+    print(general_eval_str)
     with open(output_file, 'w') as of:
-        of.write(cars_cub_eval_str + '\n')
-        of.write(sop_eval_str + '\n')
-        of.write(in_shop_eval_str + '\n')
+        of.write(general_eval_str + '\n')
 
     # Binary embedding evaluation
     binary_query_embeddings = np.require(query_embeddings > 0, dtype='float32')
@@ -113,19 +105,11 @@ def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query
     r_at_k_b = evaluate_recall_at_k(dists, retrieved_result_indices, query_labels, db_labels, k)
 
     output_file = output + '_binary.eval'
-    cars_cub_eval_str = "R@1, R@2, R@4, R@8: {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
-        r_at_k_b[0], r_at_k_b[1], r_at_k_b[3], r_at_k_b[7])
-    sop_eval_str = "R@1, R@10, R@100, R@1000: {:.2f} & {:.2f} & {:.2f} & {:.2f}  \\\\".format(
-        r_at_k_b[0], r_at_k_b[9], r_at_k_b[99], r_at_k_b[999])
-    in_shop_eval_str = "R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
+    general_eval_str = "R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
         r_at_k_b[0], r_at_k_b[9], r_at_k_b[19], r_at_k_b[29], r_at_k_b[39], r_at_k_b[49])
 
-    print(cars_cub_eval_str)
-    print(sop_eval_str)
-    print(in_shop_eval_str)
+    print(general_eval_str)
     with open(output_file, 'w') as of:
-        of.write(cars_cub_eval_str + '\n')
-        of.write(sop_eval_str + '\n')
-        of.write(in_shop_eval_str + '\n')
+        of.write(general_eval_str + '\n')
 
-    return max(r_at_k_f[0], r_at_k_b[0])
+    return r_at_k_f[0], r_at_k_b[0]

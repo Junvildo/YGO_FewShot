@@ -24,7 +24,7 @@ def extract_feature(model, loader, device):
             all_labels.extend(instance_label.tolist())
 
             if (i + 1) % log_every_n_step == 0:
-                print('Process Iteration {} / {}:'.format(i, len(loader)))
+                print('Process Iteration {} / {}'.format(i, len(loader)))
 
     all_embeddings = np.vstack(all_embeddings)
 
