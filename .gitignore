@@ -1,5 +1,7 @@
 main_dataset/
 .vscode/
+output/
+mobileone*.tar
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
