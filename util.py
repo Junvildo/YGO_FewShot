@@ -8,24 +8,23 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
 import os
+import matplotlib.pyplot as plt
 
 
-class SimpleLogger(object):
-    def __init__(self, logfile, terminal):
-        self.log = open(logfile, 'a', buffering=1)  # Line buffered mode for text
-        self.terminal = terminal
+def log_and_print(message, log_file):
+    print(message)
+    log_file.write(message + "\n")
+    log_file.flush()
 
-    def write(self, message):
-        self.terminal.write(message)
-        self.terminal.flush()  # Flush terminal output
-        self.log.write(message)
-        self.log.flush()  # Immediately flush log to file
-
-    def flush(self):
-        # Explicitly flushing both the terminal and log file
-        self.terminal.flush()
-        self.log.flush()
-
+def plot_metrics(metric_values, title, ylabel, output_path):
+    plt.figure()
+    plt.plot(metric_values, marker='o')
+    plt.title(title)
+    plt.xlabel("Epoch")
+    plt.ylabel(ylabel)
+    plt.grid()
+    plt.savefig(output_path)
+    plt.close()
 
 # Function to calculate mean and std
 def calculate_mean_std(data_path: str):
