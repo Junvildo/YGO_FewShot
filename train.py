@@ -20,13 +20,11 @@ Training process:
 from argparse import ArgumentParser
 import torch
 import os
-import sys
-from util import SimpleLogger, calculate_mean_std
-from mobileone import mobileone, reparameterize_model
+from util import calculate_mean_std, log_and_print, plot_metrics
+from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from torchvision.datasets import ImageFolder
 from sampler import ClassBalancedBatchSampler
 from data import CustomDataset
 from torch.utils.data.dataloader import default_collate
@@ -34,7 +32,10 @@ import losses
 import time
 from extract_features import extract_feature
 from retrieval import evaluate_float_binary_embedding_faiss
+from itertools import chain
 
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 def parse_args():
     """
@@ -44,21 +45,21 @@ def parse_args():
     # Optional arguments for the launch helper
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
-    parser.add_argument("--batch_size", type=int, default=2, help="Batch size for training")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training")
     parser.add_argument("--img_size", type=int, default=7, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
-    parser.add_argument("--images_per_class", type=int, default=2, help="Images per class")
+    parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
-
     parser.add_argument("--test_every_n_epochs", type=int, default=1, help="Tests every N epochs")
     parser.add_argument("--epochs_per_step", type=int, default=1, help="Epochs for learning rate step")
-    parser.add_argument("--pretrain_epochs", type=int, default=5, help="Epochs for pretraining")
+    parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
     parser.add_argument("--num_steps", type=int, default=1, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
+    parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
 
     return parser.parse_args()
 
@@ -78,11 +79,16 @@ def main():
                                     '_'.join([args.model_variant, str(args.batch_size)]))
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    out_log = os.path.join(output_directory, "train.log")
-    sys.stdout = SimpleLogger(out_log, sys.stdout)
+    # Open log file for writing
+    out_log = os.path.join(output_directory, "train_log.txt")
+    log_file = open(out_log, "w")
 
     # Select model
     baseline = mobileone(variant=args.model_variant)
+    if args.pretrain_path != "":
+        log_and_print('Load pretrain model checkpoint', log_file)
+        checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=True)
+        baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
     # Calculate mean and std of data
@@ -93,10 +99,7 @@ def main():
         transforms.Grayscale(num_output_channels=3),
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation((-270,270)),
         transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
-        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std)
     ])
@@ -137,16 +140,23 @@ def main():
     # Setup loss function
     loss_fn = losses.NormSoftmaxLoss(args.dim, train_dataset.num_instance)
 
+    model = torch.nn.DataParallel(model)
     model.to(device=device)
+
+    loss_fn = torch.nn.DataParallel(loss_fn)
     loss_fn.to(device=device)
 
     # Training mode
     model.train()
 
     # Start with pretraining where we finetune only new parameters to warm up
-    opt = torch.optim.SGD(list(loss_fn.parameters()) + list(set(model.parameters()) -
-                                                            set(model.feature.parameters())),
+    opt = torch.optim.SGD(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
+                                                            set(model.module.feature.parameters())),
                           lr=args.lr * args.lr_mult, momentum=0.9, weight_decay=1e-4)
+
+    # Lists to store max_f and max_b for pretraining and finetuning
+    pretrain_max_f, pretrain_max_b = [], []
+    finetune_max_f, finetune_max_b = [], []
 
     log_every_n_step = 10
     for epoch in range(args.pretrain_epochs):
@@ -168,15 +178,65 @@ def main():
             end = time.time()
 
             if (i + 1) % log_every_n_step == 0:
-                print('Epoch {}, LR {}, Iteration {} / {}:\t{}'.format(
-                    args.pretrain_epochs - epoch, opt.param_groups[0]['lr'], i, len(train_loader), loss.item()))
-
-                print('Data: {}\tForward: {}\tBackward: {}\tBatch: {}'.format(
-                    forward - data, back - forward, end - back, end - forward))
+                log_and_print(f'Epoch {args.pretrain_epochs - epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)}:\t{loss.item()}', log_file)
+                log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
 
         eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
         embeddings, labels = extract_feature(model, eval_loader, device)
-        evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+        max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=50)
+
+            # Store max_f and max_b
+        pretrain_max_f.append(max_f)
+        pretrain_max_b.append(max_b)
+
+    # Full end-to-end finetune of all parameters
+    opt = torch.optim.SGD(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+
+    for epoch in range(args.epochs_per_step * args.num_steps):
+        log_and_print(f'Output Directory: {output_directory}', log_file)
+        adjust_learning_rate(opt, epoch, args.epochs_per_step, gamma=args.gamma)
+
+        for i, (im, _, instance_label, index) in enumerate(train_loader):
+            data = time.time()
+
+            opt.zero_grad()
+
+            im = im.to(device=device, non_blocking=True)
+            instance_label = instance_label.to(device=device, non_blocking=True)
+
+            forward = time.time()
+            embedding = model(im)
+            loss = loss_fn(embedding, instance_label)
+
+            back = time.time()
+            loss.backward()
+            opt.step()
+
+            end = time.time()
+
+            if (i + 1) % log_every_n_step == 0:
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)}:\t{loss.item()}', log_file)
+                log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
+
+        snapshot_path = os.path.join(output_directory, 'epoch_{}.pth'.format(epoch + 1))
+        torch.save(model.state_dict(), snapshot_path)
+
+        if (epoch + 1) % args.test_every_n_epochs == 0:
+            eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
+            embeddings, labels = extract_feature(model, eval_loader, device)
+            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=50)
+
+            # Store max_f and max_b
+            finetune_max_f.append(max_f)
+            finetune_max_b.append(max_b)
+    log_file.close()
+
+    # Save plots
+    plot_metrics(pretrain_max_f, "Max F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_f.png"))
+    plot_metrics(pretrain_max_b, "Max B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_b.png"))
+    plot_metrics(finetune_max_f, "Max F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_f.png"))
+    plot_metrics(finetune_max_b, "Max B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_b.png"))
+
 
 if __name__ == '__main__':
     main()
