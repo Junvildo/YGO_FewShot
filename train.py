@@ -45,17 +45,17 @@ def parse_args():
     # Optional arguments for the launch helper
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
-    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training")
-    parser.add_argument("--img_size", type=int, default=7, help="Image size for training")
+    parser.add_argument("--batch_size", type=int, default=512, help="Batch size for training")
+    parser.add_argument("--img_size", type=int, default=224, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--lr", type=float, default=0.001, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
-    parser.add_argument("--class_balancing", default=False, action='store_true', help="Use class balancing")
+    parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
     parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
-    parser.add_argument("--epochs_per_step", type=int, default=3, help="Epochs for learning rate step")
+    parser.add_argument("--epochs_per_step", type=int, default=4, help="Epochs for learning rate step")
     parser.add_argument("--pretrain_epochs", type=int, default=5, help="Epochs for pretraining")
     parser.add_argument("--num_steps", type=int, default=3, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
@@ -117,7 +117,7 @@ def main():
     # Setup dataset loader
     if args.class_balancing:
         print("Class Balancing")
-        train_sampler = ClassBalancedBatchSampler(train_dataset.instance_labels, args.batch_size, args.images_per_class)
+        train_sampler = ClassBalancedBatchSampler(train_dataset.class_labels_list, args.batch_size, args.images_per_class)
         train_loader = DataLoader(train_dataset,
                                   batch_sampler=train_sampler, num_workers=4,
                                   pin_memory=True, drop_last=False, collate_fn=default_collate)
@@ -164,7 +164,7 @@ def main():
     for epoch in range(args.pretrain_epochs):
         begin = time.time()
         epoch_loss = 0.0
-        # for i, (im, _, instance_label, index) in enumerate(train_loader):
+        # for i, (im, _, instance_label, _) in enumerate(train_loader):
         for i, (im, instance_label) in enumerate(train_loader):
             data = time.time()
             opt.zero_grad()
