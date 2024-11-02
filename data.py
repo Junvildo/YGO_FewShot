@@ -83,6 +83,10 @@ class CustomDataset(Dataset):
     def num_instance(self):
         return len(self.image_paths)
 
+    @property
+    def class_labels_list(self):
+        return self.class_labels
+
     def _load(self):
         self.class_map = {}
         self.image_paths = []

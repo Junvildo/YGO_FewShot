@@ -29,18 +29,17 @@ class ClassBalancedBatchSampler(object):
         return reverse_index, ignored
 
     def sample_batch(self):
-        # Real batch size is self.images_per_class * (self.batch_size // self.images_per_class)
         num_classes = self.batch_size // self.images_per_class
-        sampled_classes = np.random.choice(self.reverse_index.keys(),
-                                           num_classes,
-                                           replace=False)
+        sampled_classes = np.random.choice(list(self.reverse_index.keys()),
+                                        num_classes,
+                                        replace=False)
         sampled_indices = []
         for cls in sampled_classes:
-            # Need replace = True for datasets with non-uniform distribution of images per class
             sampled_indices.extend(np.random.choice(self.reverse_index[cls],
                                                     self.images_per_class,
                                                     replace=True))
         return sampled_indices
+
 
     def __len__(self):
         return len(self.targets) // self.batch_size
