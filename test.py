@@ -68,8 +68,17 @@
 #                             batch_sampler=train_sampler, num_workers=4,
 #                             pin_memory=True, drop_last=False, collate_fn=default_collate)
 
-# # print(train_dataset.__getitem__(0))
+# for data in train_loader:
+#     matrix, class_labels = data
+#     print(matrix.shape, class_labels.shape)
+#     break
+
+
+# train_loader = DataLoader(train_dataset,
+#                             num_workers=4, batch_size=2,
+#                             pin_memory=True, drop_last=False, collate_fn=default_collate)
 
 # for data in train_loader:
-#     print(data)
+#     matrix, class_labels = data
+#     print(matrix.shape, class_labels.shape)
 #     break
