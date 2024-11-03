@@ -188,7 +188,7 @@ def main():
         
         average_loss = epoch_loss / max(1, len(train_loader))
         pretrain_losses.append(average_loss)
-        log_and_print(f'Epoch {args.pretrain_epochs - epoch} average loss: {average_loss:0.5f}', log_file)
+        log_and_print(f'Epoch {epoch} average loss: {average_loss:0.5f}', log_file)
 
         finish = time.time()
         remaining_epochs = args.pretrain_epochs - epoch - 1
