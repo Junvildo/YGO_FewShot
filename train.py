@@ -45,10 +45,10 @@ def parse_args():
     # Optional arguments for the launch helper
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
-    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training")
+    parser.add_argument("--batch_size", type=int, default=75, help="Batch size for training")
     parser.add_argument("--img_size", type=int, default=224, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
-    parser.add_argument("--lr", type=float, default=0.001, help="The base lr")
+    parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
@@ -183,18 +183,18 @@ def main():
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {args.pretrain_epochs - epoch}, LR {opt.param_groups[0]["lr"]:0.2f}, Iteration {i} / {len(train_loader)}:\t{loss.item():0.2f}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.item():0.5f}', log_file)
                 log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
         
         average_loss = epoch_loss / max(1, len(train_loader))
         pretrain_losses.append(average_loss)
-        log_and_print(f'Epoch {args.pretrain_epochs - epoch} average loss: {average_loss:0.2f}', log_file)
+        log_and_print(f'Epoch {args.pretrain_epochs - epoch} average loss: {average_loss:0.5f}', log_file)
 
         finish = time.time()
         remaining_epochs = args.pretrain_epochs - epoch - 1
         estimate_finish_time = round((finish - begin) * remaining_epochs, 5)
-        print(f'Pretrain: Epoch {args.pretrain_epochs - epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n')
-        log_and_print(f'Pretrain: Epoch {args.pretrain_epochs - epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
+        print(f'Pretrain: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n')
+        log_and_print(f'Pretrain: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
             embeddings, labels = extract_feature(model, eval_loader, device)
@@ -239,17 +239,17 @@ def main():
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.2f}, Iteration {i} / {len(train_loader)}:\t{loss.item():0.2f}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.item():0.5f}', log_file)
                 log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
 
         average_loss = epoch_loss / max(1, len(train_loader))
         finetune_losses.append(average_loss)
-        log_and_print(f'Epoch {epoch} average loss: {average_loss:0.2f}', log_file)
+        log_and_print(f'Epoch {epoch} average loss: {average_loss:0.5f}', log_file)
 
         finish = time.time()
         remaining_epochs = (args.epochs_per_step * args.num_steps) - epoch - 1
         estimate_finish_time = round((finish - begin) * remaining_epochs, 5)
-        log_and_print(f'Finetune: Epoch {args.epochs_per_step * args.num_steps-epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
+        log_and_print(f'Finetune: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
         snapshot_path = os.path.join(output_directory, 'epoch_{}.pth'.format(epoch + 1))
         torch.save(model.state_dict(), snapshot_path)
 
