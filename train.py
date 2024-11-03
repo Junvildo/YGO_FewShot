@@ -73,6 +73,7 @@ def adjust_learning_rate(optimizer, epoch, epochs_per_step, gamma=0.1):
 
 def main():
     args = parse_args()
+    print(args)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     output_directory = os.path.join(args.output, str(args.dim),
