@@ -183,7 +183,7 @@ def main():
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.item():0.5f}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.mean().item():0.5f}', log_file)
                 log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
         
         average_loss = epoch_loss / max(1, len(train_loader))
@@ -239,7 +239,7 @@ def main():
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.item():0.5f}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.mean().item():0.5f}', log_file)
                 log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
 
         average_loss = epoch_loss / max(1, len(train_loader))
