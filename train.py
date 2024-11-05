@@ -65,7 +65,10 @@ def main(args):
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
     # Calculate mean and std of data
-    mean, std = calculate_mean_std(data_path=args.dataset_root)
+    if args.pretrain_path != "":
+        mean, std = calculate_mean_std(data_path=args.dataset_root)
+    else:
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
@@ -122,9 +125,13 @@ def main(args):
     # Training mode
     model.train()
     # Start with pretraining where we finetune only new parameters to warm up
-    opt = torch.optim.SGD(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
+    # opt = torch.optim.SGD(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
+    #                                                         set(model.module.feature.parameters())),
+    #                       lr=args.lr * args.lr_mult, momentum=0.9, weight_decay=1e-4)
+
+    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
                                                             set(model.module.feature.parameters())),
-                          lr=args.lr * args.lr_mult, momentum=0.9, weight_decay=1e-4)
+                          lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
 
     # Lists to store max_f and max_b for pretraining and finetuning
     pretrain_max_f, pretrain_max_b = [], []
@@ -182,7 +189,8 @@ def main(args):
 
     # Full end-to-end finetune of all parameters
     model.train()
-    opt = torch.optim.SGD(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+    # opt = torch.optim.SGD(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+    opt = torch.optim.AdamW(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
     print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
     print("="*80)
     for epoch in range(args.epochs_per_step * args.num_steps):
