@@ -82,3 +82,105 @@
 #     matrix, class_labels = data
 #     print(matrix.shape, class_labels.shape)
 #     break
+
+# import faiss
+# import numpy as np
+# from models import EmbeddedFeatureWrapper
+# from torch.utils.data import DataLoader
+# from torchvision import transforms
+# from data import CustomDataset
+# from torch.utils.data.dataloader import default_collate
+# from extract_features import extract_feature
+# from mobileone import mobileone
+# import torch
+# import os
+# import time
+
+# os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+# from PIL import Image
+
+# def create_query_embedding(image_path, model, device):
+#     # Load and preprocess the image
+#     image = Image.open(image_path).convert('RGB')
+#     transform = transforms.Compose([
+#         transforms.Grayscale(num_output_channels=3),
+#         transforms.Resize((56, 56)),
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+#     ])
+#     image_tensor = transform(image).unsqueeze(0).to(device)
+
+#     # Evaluate the model to get the embedding
+#     model.eval()
+#     with torch.no_grad():
+#         query_embedding = model(image_tensor)
+
+#     return query_embedding.cpu().numpy()
+
+
+# def retrieve_knn_faiss_euclidean(query_embeddings, db_embeddings, k):
+#     """
+#         Retrieve k nearest neighbors based on Euclidean distance using CPU.
+
+#         Args:
+#             query_embeddings:           numpy array of size [NUM_QUERY_IMAGES x EMBED_SIZE]
+#             db_embeddings:              numpy array of size [NUM_DB_IMAGES x EMBED_SIZE]
+#             k:                          number of nn results to retrieve excluding query
+
+#         Returns:
+#             dists:                      numpy array of size [NUM_QUERY_IMAGES x k], distances of k nearest neighbors
+#                                         for each query
+#             retrieved_db_indices:       numpy array of size [NUM_QUERY_IMAGES x k], indices of k nearest neighbors
+#                                         for each query
+#     """
+#     index = faiss.IndexFlatL2(db_embeddings.shape[1])  # Euclidean distance index
+#     index.add(db_embeddings)
+#     dists, retrieved_result_indices = index.search(query_embeddings, k + 1)
+
+#     return dists, retrieved_result_indices
+
+# if __name__ == "__main__":
+#     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#     model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
+#     state_dict = torch.load("./finetuned_models/s2_56_epoch_45.pth", map_location=device, weights_only=True)
+#     state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+#     model.load_state_dict(state_dict)
+#     trans = transforms.Compose([
+#         transforms.Grayscale(num_output_channels=3),
+#         transforms.Resize((56, 56)),
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+#     ])
+#     dataset = CustomDataset("D:/Coding/ygo_fsl/dataset/", transform=trans, train=True)
+#     if not os.path.exists("embeddings.npy"):
+
+#         dataloader = DataLoader(dataset, batch_size=8, num_workers=4,pin_memory=True, collate_fn=default_collate)
+#         embeddings, labels = extract_feature(loader=dataloader, model=model, device=device)
+#         # Save embeddings to a file
+#         np.save("embeddings.npy", embeddings)
+
+#     embeddings = np.load("embeddings.npy")
+#     binary_db_embeddings = np.require(embeddings > 0, dtype='float32')
+
+
+#     # Example usage
+#     time_start = time.time()
+#     image_path = "detected_object_3.jpg"
+#     query_embedding = create_query_embedding(image_path, model, device)
+
+#     binary_query_embeddings = np.require(query_embedding > 0, dtype='float32')
+
+
+#     dists, retrieved_result_indices = retrieve_knn_faiss_euclidean(binary_query_embeddings, binary_db_embeddings, 1)
+#     print(dists)
+#     print(retrieved_result_indices)
+#     # Convert retrieved indices to image names or image classes
+#     image_names = [dataset.image_paths[i] for i in retrieved_result_indices[0]]
+#     image_classes = [dataset.class_labels[i] for i in retrieved_result_indices[0]]
+
+#     time_end = time.time()
+#     print("Time cost: {} seconds".format(time_end - time_start))
+
+#     print("Retrieved Image Names:", image_names)
+#     print("Retrieved Image Classes:", image_classes)
+
