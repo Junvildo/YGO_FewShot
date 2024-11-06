@@ -2,6 +2,9 @@ main_dataset/
 .vscode/
 output/
 mobileone*.tar
+finetuned_models/
+real_life_images/
+embeddings.npy
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
