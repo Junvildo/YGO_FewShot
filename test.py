@@ -184,3 +184,29 @@
 #     print("Retrieved Image Names:", image_names)
 #     print("Retrieved Image Classes:", image_classes)
 
+
+
+import json
+import requests
+
+
+# with open('all_cards.json') as f:
+#     data = json.load(f)
+data = requests.get('https://db.ygoprodeck.com/api/v7/cardinfo.php').json()
+
+cards = [card for card in data['data'] if card['type'] not in ['Token', 'Skill Card']]
+
+# Card image_url list
+url_list = [img['image_url_cropped'] for card in cards for img in card['card_images']]
+
+card_url_dict = {}
+for card in cards:
+    if len(card['card_images']) != 1:
+        card_url_dict[card['id']] = [url['image_url_cropped'] for url in card['card_images']]
+    else:
+        card_url_dict[card['id']] = [card['card_images'][0]['image_url_cropped']]
+
+
+
+with open('card_url_dict.json', 'w') as f:
+    json.dump(card_url_dict, f)
