@@ -2,3 +2,6 @@ torch
 torchvision
 faiss-cpu
 matplotlib
+tqdm
+aiohttp
+requests
