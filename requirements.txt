@@ -5,3 +5,6 @@ matplotlib
 tqdm
 aiohttp
 requests
+ultralytics
+opencv-python
+imutils

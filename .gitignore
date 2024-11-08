@@ -4,6 +4,7 @@ output/
 mobileone*.tar
 finetuned_models/
 real_life_images/
+yolo_detected/
 embeddings.npy
 # Byte-compiled / optimized / DLL files
 __pycache__/
