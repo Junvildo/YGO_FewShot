@@ -6,6 +6,8 @@ finetuned_models/
 real_life_images/
 yolo_detected/
 embeddings.npy
+dataset_artworks_*/
+download_log_artworks_*.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
