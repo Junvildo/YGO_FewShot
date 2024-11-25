@@ -75,7 +75,7 @@ def main(args):
 
     # Define the transformations for training and evaluation
     train_transform = A.Compose([
-        A.Grayscale(num_output_channels=3),  # Convert to grayscale with 3 channels (RGB)
+        A.ToGray(num_output_channels=3),  # Convert to grayscale with 3 channels (RGB)
         A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
         A.RandomBrightnessContrast(brightness_limit=(0.5, 1.5), contrast_limit=(0.3, 2.0), p=0.5),  # Random brightness and contrast adjustments
         A.HueSaturationValue(hue_shift_limit=0.05, sat_shift_limit=0.15, val_shift_limit=0.2, p=0.5),  # Random color shifts
@@ -90,7 +90,7 @@ def main(args):
     ])
 
     eval_transform = A.Compose([
-        A.Grayscale(num_output_channels=3),  # Convert to grayscale with 3 channels
+        A.ToGray(num_output_channels=3),  # Convert to grayscale with 3 channels
         A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
         ToTensorV2(),  # Convert to tensor
         A.Normalize(mean=mean, std=std)  # Normalize image
