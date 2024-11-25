@@ -33,6 +33,9 @@ import time
 from extract_features import extract_feature
 from retrieval import evaluate_float_binary_embedding_faiss
 from itertools import chain
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -70,20 +73,27 @@ def main(args):
     else:
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
 
-    # Setup train and eval transformations
-    train_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
-        transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
+    # Define the transformations for training and evaluation
+    train_transform = A.Compose([
+        A.Grayscale(num_output_channels=3),  # Convert to grayscale with 3 channels (RGB)
+        A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
+        A.RandomBrightnessContrast(brightness_limit=(0.5, 1.5), contrast_limit=(0.3, 2.0), p=0.5),  # Random brightness and contrast adjustments
+        A.HueSaturationValue(hue_shift_limit=0.05, sat_shift_limit=0.15, val_shift_limit=0.2, p=0.5),  # Random color shifts
+        A.Perspective(distortion_scale=0.6, p=1.0, keep_size=True),  # Random perspective distortion to simulate viewing angle changes
+        A.OneOf([  # Add some effects to simulate the look of a plastic-wrapped card
+            A.GaussianBlur(blur_limit=(3, 5), p=0.3),  # Apply slight blur
+            A.MedianBlur(blur_limit=3, p=0.3),  # Alternative blur effect
+        ], p=0.3),
+        A.RandomGamma(gamma_limit=(80, 120), p=0.5),  # Random gamma correction to simulate plastic reflection
+        ToTensorV2(),  # Convert to tensor
+        A.Normalize(mean=mean, std=std)  # Normalize image
     ])
-    eval_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
+
+    eval_transform = A.Compose([
+        A.Grayscale(num_output_channels=3),  # Convert to grayscale with 3 channels
+        A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
+        ToTensorV2(),  # Convert to tensor
+        A.Normalize(mean=mean, std=std)  # Normalize image
     ])
 
     # Setup dataset
