@@ -42,4 +42,5 @@ def calculate_mean_std(data_path: str):
 
     mean /= total_images_count
     std /= total_images_count
-    return mean, std
+    # return mean, std
+    return mean.tolist(), std.tolist()
