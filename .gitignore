@@ -10,6 +10,8 @@ dataset_artworks*/
 download_log_artworks*.txt
 failed_cards.txt
 failed_artworks/
+*.faiss
+*.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
