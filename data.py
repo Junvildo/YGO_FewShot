@@ -2,6 +2,8 @@ import os
 import random
 from PIL import Image
 from abc import ABCMeta, abstractmethod
+from torchvision import transforms
+from torch.utils.data import Dataset as BaseDataset
 
 class Dataset(object):
     """
@@ -123,6 +125,51 @@ class CustomDataset(Dataset):
 
     def __len__(self):
         return len(self.image_paths)
+
+
+class InferenceDataset(BaseDataset):
+    def __init__(self, numpy_arrays, transform=None):
+        """
+        Args:
+            numpy_arrays: List of numpy arrays representing images.
+            transform: Transformations to be applied to each image.
+        """
+        self.numpy_arrays = numpy_arrays
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.numpy_arrays)
+
+    def __getitem__(self, idx):
+        image = self.numpy_arrays[idx]
+        if self.transform:
+            # Apply transformations (convert numpy to PIL image first)
+            image = self.transform(transforms.ToPILImage()(image))
+        return image
+    
+class ImageDataset(BaseDataset):
+    def __init__(self, image_paths, labels, transform):
+        self.image_paths = image_paths
+        self.labels = labels
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        
+        # Open the image
+        image_path = self.image_paths[idx]
+        image = Image.open(image_path).convert('RGB')
+        
+        # Extract the folder name as the label
+        label = os.path.basename(os.path.dirname(image_path))
+        
+        # Apply transformation if provided
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, label
 
 
 if __name__ == '__main__':
