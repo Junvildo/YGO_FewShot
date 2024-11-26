@@ -85,15 +85,15 @@ def main(args):
             A.MedianBlur(blur_limit=3, p=0.3),  # Alternative blur effect
         ], p=0.3),
         A.RandomGamma(gamma_limit=(80, 120), p=0.5),  # Random gamma correction to simulate plastic reflection
-        ToTensorV2(),  # Convert to tensor
-        A.Normalize(mean=mean, std=std)  # Normalize image
+        A.Normalize(mean=mean, std=std),  # Normalize image
+        ToTensorV2()  # Convert to tensor
     ])
 
     eval_transform = A.Compose([
         A.ToGray(num_output_channels=3),  # Convert to grayscale with 3 channels
         A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
-        ToTensorV2(),  # Convert to tensor
-        A.Normalize(mean=mean, std=std)  # Normalize image
+        A.Normalize(mean=mean, std=std),  # Normalize image
+        ToTensorV2()  # Convert to tensor
     ])
 
     # Setup dataset

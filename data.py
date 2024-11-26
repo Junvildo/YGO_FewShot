@@ -4,6 +4,8 @@ from PIL import Image
 from abc import ABCMeta, abstractmethod
 from torchvision import transforms
 from torch.utils.data import Dataset as BaseDataset
+import numpy as np
+import torch
 
 class Dataset(object):
     """
@@ -112,16 +114,34 @@ class CustomDataset(Dataset):
                 self.image_paths.append(img_path)
                 self.class_labels.append(self.class_map[class_name])
 
-    def __getitem__(self, index):
-        img_path = self.image_paths[index]
-        label = self.class_labels[index]
+    # def __getitem__(self, index):
+    #     img_path = self.image_paths[index]
+    #     label = self.class_labels[index]
 
-        # Load image
+    #     # Load image
+    #     image = Image.open(img_path).convert('RGB')
+    #     if self.transform:
+    #         image = self.transform(image=image)["image"]
+
+    #     return image, label
+
+    def __getitem__(self, idx):
+        # Open the image
+        img_path = self.image_paths[idx]
         image = Image.open(img_path).convert('RGB')
+        
+        # Convert the image to a NumPy array
+        image = np.asarray(image)
+        
+        # Extract the folder name as the label
+        label = self.class_labels[idx]
+        
+        # Apply transformation if provided
         if self.transform:
             image = self.transform(image=image)["image"]
-
+        
         return image, label
+
 
     def __len__(self):
         return len(self.image_paths)
@@ -156,11 +176,14 @@ class ImageDataset(BaseDataset):
     def __len__(self):
         return len(self.image_paths)
 
+
     def __getitem__(self, idx):
-        
         # Open the image
         image_path = self.image_paths[idx]
         image = Image.open(image_path).convert('RGB')
+        
+        # Convert the image to a NumPy array
+        image = np.array(image)
         
         # Extract the folder name as the label
         label = os.path.basename(os.path.dirname(image_path))
@@ -170,6 +193,7 @@ class ImageDataset(BaseDataset):
             image = self.transform(image=image)["image"]
         
         return image, label
+
 
 
 if __name__ == '__main__':
