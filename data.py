@@ -119,7 +119,7 @@ class CustomDataset(Dataset):
         # Load image
         image = Image.open(img_path).convert('RGB')
         if self.transform:
-            image = self.transform(image)
+            image = self.transform(image=image)["image"]
 
         return image, label
 
@@ -144,7 +144,7 @@ class InferenceDataset(BaseDataset):
         image = self.numpy_arrays[idx]
         if self.transform:
             # Apply transformations (convert numpy to PIL image first)
-            image = self.transform(transforms.ToPILImage()(image))
+            image = self.transform(image = transforms.ToPILImage()(image))["image"]
         return image
     
 class ImageDataset(BaseDataset):
@@ -167,14 +167,14 @@ class ImageDataset(BaseDataset):
         
         # Apply transformation if provided
         if self.transform:
-            image = self.transform(image)
+            image = self.transform(image=image)["image"]
         
         return image, label
 
 
 if __name__ == '__main__':
     # Load the training set
-    data_path = './main_dataset'
+    data_path = 'dataset_artworks'
     custom_train_set = CustomDataset(data_path, train=True)
     print("Loaded {} samples for dataset {}".format(len(custom_train_set), custom_train_set.name))
     for i in random.sample(range(0, len(custom_train_set)), 5):
