@@ -33,9 +33,6 @@ import time
 from extract_features import extract_feature
 from retrieval import evaluate_float_binary_embedding_faiss
 from itertools import chain
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -73,27 +70,20 @@ def main(args):
     else:
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
 
-    # Define the transformations for training and evaluation
-    train_transform = A.Compose([
-        A.ToGray(num_output_channels=3),  # Convert to grayscale with 3 channels (RGB)
-        A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
-        A.RandomBrightnessContrast(brightness_limit=(0.5, 1.5), contrast_limit=(0.3, 2.0), p=0.5),  # Random brightness and contrast adjustments
-        A.HueSaturationValue(hue_shift_limit=0.05, sat_shift_limit=0.15, val_shift_limit=0.2, p=0.5),  # Random color shifts
-        A.Perspective(distortion_scale=0.6, p=1.0, keep_size=True),  # Random perspective distortion to simulate viewing angle changes
-        A.OneOf([  # Add some effects to simulate the look of a plastic-wrapped card
-            A.GaussianBlur(blur_limit=(3, 5), p=0.3),  # Apply slight blur
-            A.MedianBlur(blur_limit=3, p=0.3),  # Alternative blur effect
-        ], p=0.3),
-        A.RandomGamma(gamma_limit=(80, 120), p=0.5),  # Random gamma correction to simulate plastic reflection
-        A.Normalize(mean=mean, std=std),  # Normalize image
-        ToTensorV2()  # Convert to tensor
+    # Setup train and eval transformations
+    train_transform = transforms.Compose([
+        transforms.Grayscale(num_output_channels=3),
+        transforms.Resize((args.img_size, args.img_size)),
+        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
+        transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std)
     ])
-
-    eval_transform = A.Compose([
-        A.ToGray(num_output_channels=3),  # Convert to grayscale with 3 channels
-        A.Resize(height=args.img_size, width=args.img_size),  # Resize the image
-        A.Normalize(mean=mean, std=std),  # Normalize image
-        ToTensorV2()  # Convert to tensor
+    eval_transform = transforms.Compose([
+        transforms.Grayscale(num_output_channels=3),
+        transforms.Resize((args.img_size, args.img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std)
     ])
 
     # Setup dataset
@@ -148,13 +138,13 @@ def main(args):
     finetune_max_f, finetune_max_b = [], []
     pretrain_losses, finetune_losses = [], []
 
-    log_every_n_step = 10
+    log_every_n_step = args.log_per_n_steps
     print("Start pretraining for {} epochs".format(args.pretrain_epochs))
     print("="*80)
     for epoch in range(args.pretrain_epochs):
         begin = time.time()
         epoch_loss = 0.0
-        for i, (im, instance_label) in enumerate(train_loader):
+        for i, (im, instance_label, _) in enumerate(train_loader):
             data = time.time()
             opt.zero_grad()
 
@@ -199,7 +189,6 @@ def main(args):
 
     # Full end-to-end finetune of all parameters
     model.train()
-    # opt = torch.optim.SGD(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, momentum=0.9, weight_decay=1e-4)
     opt = torch.optim.AdamW(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
     print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
     print("="*80)
@@ -210,7 +199,7 @@ def main(args):
         
         epoch_loss = 0.0
         # for i, (im, _, instance_label, index) in enumerate(train_loader):
-        for i, (im, instance_label) in enumerate(train_loader):
+        for i, (im, instance_label, _) in enumerate(train_loader):
             data = time.time()
 
             opt.zero_grad()
@@ -272,11 +261,12 @@ if __name__ == '__main__':
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
     parser.add_argument("--batch_size", type=int, default=75, help="Batch size for training")
+    parser.add_argument("--log_per_n_steps", type=int, default=1000, help="Log every N steps")
     parser.add_argument("--img_size", type=int, default=224, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
-    parser.add_argument("--class_balancing", default=False, action='store_true', help="Use class balancing")
+    parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")

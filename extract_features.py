@@ -17,7 +17,7 @@ def extract_feature(model, loader, device):
     log_every_n_step = 10
     start = time.time()
     with torch.no_grad():
-        for i, (im, instance_label) in enumerate(loader):
+        for i, (im, instance_label, _) in enumerate(loader):
             im = im.to(device=device)
             embedding = model_eval(im)
 
