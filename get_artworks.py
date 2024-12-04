@@ -8,7 +8,7 @@ import requests
 import random
 
 # Configurable settings
-READ_FULL_JSON = False  # Set to False to limit to 40 images for testing
+READ_FULL_JSON = True  # Set to False to limit to 40 images for testing
 MAX_REQUESTS_PER_SECOND = 15
 BASE_FOLDER = 'dataset_artworks'
 TRAIN_FOLDER = os.path.join(BASE_FOLDER, 'train')
