@@ -4,7 +4,7 @@ import time
 from mobileone import reparameterize_model
 
 
-def extract_feature(model, loader, device):
+def extract_feature(model, loader, device, step=10):
     """
     Extract embeddings from given `model` for given `loader` dataset on `device`.
     """
@@ -14,7 +14,7 @@ def extract_feature(model, loader, device):
     
     all_embeddings = []
     all_labels = []
-    log_every_n_step = 10
+    log_every_n_step = step
     start = time.time()
     with torch.no_grad():
         for i, (im, instance_label, _) in enumerate(loader):

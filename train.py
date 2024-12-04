@@ -152,21 +152,17 @@ def main(args):
         begin = time.time()
         epoch_loss = 0.0
         for i, (im, instance_label, _) in enumerate(train_loader):
-            data = time.time()
             opt.zero_grad()
 
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
 
-            forward = time.time()
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
 
-            back = time.time()
             loss.mean().backward()
             opt.step()
 
-            end = time.time()
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
@@ -184,8 +180,8 @@ def main(args):
         log_and_print(f'Pretrain: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
-            embeddings, labels = extract_feature(model, eval_loader, device)
-            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=50)
+            embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
+            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1)
 
             # Store max_f and max_b
             pretrain_max_f.append(max_f)
@@ -207,22 +203,18 @@ def main(args):
         epoch_loss = 0.0
         # for i, (im, _, instance_label, index) in enumerate(train_loader):
         for i, (im, instance_label, _) in enumerate(train_loader):
-            data = time.time()
 
             opt.zero_grad()
 
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
 
-            forward = time.time()
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
 
-            back = time.time()
             loss.mean().backward()
             opt.step()
 
-            end = time.time()
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
@@ -242,8 +234,8 @@ def main(args):
 
         if (epoch + 1) % args.test_every_n_epochs == 0:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
-            embeddings, labels = extract_feature(model, eval_loader, device)
-            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=50)
+            embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
+            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1)
             model.train()
 
             # Store max_f and max_b
