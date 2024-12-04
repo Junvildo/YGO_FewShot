@@ -23,7 +23,7 @@ import os
 from util import calculate_mean_std, log_and_print, plot_metrics
 from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
-from torchvision import transforms
+from torchvision.transforms import v2 as transforms
 from torch.utils.data import DataLoader
 from sampler import ClassBalancedBatchSampler
 from data import CustomDataset
@@ -64,25 +64,32 @@ def main(args):
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
-    # Calculate mean and std of data
-    if args.pretrain_path != "":
-        mean, std = calculate_mean_std(data_path=args.dataset_root)
-    else:
-        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
+    # # Calculate mean and std of data
+    # if args.pretrain_path != "":
+    #     mean, std = calculate_mean_std(data_path=args.dataset_root)
+    # else:
+    #     mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
+    
+    mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
-        transforms.Resize((args.img_size, args.img_size)),
+        transforms.PILToTensor(),
+        transforms.ToDtype(torch.float32, scale=True),
+        transforms.RandomResizedCrop((args.img_size, args.img_size), antialias=True),
         transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
+        transforms.RandomRotation(degrees=(0, 359)),
         transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
-        transforms.ToTensor(),
+        transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5.)),
+        transforms.GaussianNoise(),
+        transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
+        transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
         transforms.Normalize(mean=mean, std=std)
     ])
     eval_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ToTensor(),
+        transforms.PILToTensor(),
+        transforms.ToDtype(torch.float32, scale=True),
+        transforms.RandomResizedCrop((args.img_size, args.img_size)),
         transforms.Normalize(mean=mean, std=std)
     ])
 
@@ -163,12 +170,12 @@ def main(args):
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.mean().item():0.5f}', log_file)
-                log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
+                # log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
         
         average_loss = epoch_loss / max(1, len(train_loader))
         pretrain_losses.append(average_loss)
-        log_and_print(f'Epoch {epoch} average loss: {average_loss:0.5f}', log_file)
+        log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
 
         finish = time.time()
         remaining_epochs = args.pretrain_epochs - epoch - 1
@@ -219,12 +226,12 @@ def main(args):
 
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]:0.5f}, Iteration {i} / {len(train_loader)}:\t{loss.mean().item():0.5f}', log_file)
-                log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
+                # log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
 
         average_loss = epoch_loss / max(1, len(train_loader))
         finetune_losses.append(average_loss)
-        log_and_print(f'Epoch {epoch} average loss: {average_loss:0.5f}', log_file)
+        log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
 
         finish = time.time()
         remaining_epochs = (args.epochs_per_step * args.num_steps) - epoch - 1
