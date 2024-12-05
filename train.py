@@ -23,7 +23,7 @@ import os
 from util import calculate_mean_std, log_and_print, plot_metrics
 from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
-from torchvision.transforms import v2 as transforms
+from torchvision import transforms
 from torch.utils.data import DataLoader
 from sampler import ClassBalancedBatchSampler
 from data import CustomDataset
@@ -64,28 +64,25 @@ def main(args):
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
-    # # Calculate mean and std of data
-    # if args.pretrain_path != "":
-    #     mean, std = calculate_mean_std(data_path=args.dataset_root)
-    # else:
-    #     mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
-    
-    mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+    # Calculate mean and std of data
+    if args.pretrain_path != "":
+        mean, std = calculate_mean_std(data_path=args.dataset_root)
+    else:
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
+
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.PILToTensor(),
-        transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
         transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),
-        transforms.Normalize(mean=mean, std=std)
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std),
     ])
     eval_transform = transforms.Compose([
-        transforms.PILToTensor(),
-        transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((args.img_size, args.img_size)),
-        transforms.Normalize(mean=mean, std=std)
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std),
     ])
 
     # Setup dataset
