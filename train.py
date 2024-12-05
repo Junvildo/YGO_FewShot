@@ -76,17 +76,16 @@ def main(args):
     train_transform = transforms.Compose([
         transforms.PILToTensor(),
         transforms.ToDtype(torch.float32, scale=True),
-        transforms.RandomResizedCrop((args.img_size, args.img_size), antialias=True),
+        transforms.Resize((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
-        transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
-        transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
+        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), resample=False, fillcolor=0),
         transforms.RandomPerspective(distortion_scale=0.6, p=1.0),
         transforms.Normalize(mean=mean, std=std)
     ])
     eval_transform = transforms.Compose([
         transforms.PILToTensor(),
         transforms.ToDtype(torch.float32, scale=True),
-        transforms.RandomResizedCrop((args.img_size, args.img_size)),
+        transforms.Resize((args.img_size, args.img_size)),
         transforms.Normalize(mean=mean, std=std)
     ])
 
