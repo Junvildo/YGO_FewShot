@@ -11,8 +11,9 @@ import random
 READ_FULL_JSON = True  # Set to False to limit to 40 images for testing
 MAX_REQUESTS_PER_SECOND = 15
 BASE_FOLDER = 'dataset_artworks'
-TRAIN_FOLDER = os.path.join(BASE_FOLDER, 'train')
-TEST_FOLDER = os.path.join(BASE_FOLDER, 'test')
+TRAINING_FOLDER = 'dataset_artworks_training'
+TRAIN_FOLDER = os.path.join(TRAINING_FOLDER, 'train')
+TEST_FOLDER = os.path.join(TRAINING_FOLDER, 'test')
 RETRY_LIMIT = 3
 TIMEOUT = aiosonic.Timeouts(
     sock_read=10,
@@ -39,8 +40,9 @@ data = {card['id']: [img['image_url_cropped'] for img in card['card_images']] fo
 if not READ_FULL_JSON:
     data = {k: data[k] for k in list(data)[:40]}
 
-# Create the base folder and subfolders
+# Create the base folders
 os.makedirs(BASE_FOLDER, exist_ok=True)
+os.makedirs(TRAINING_FOLDER, exist_ok=True)
 os.makedirs(TRAIN_FOLDER, exist_ok=True)
 os.makedirs(TEST_FOLDER, exist_ok=True)
 
@@ -55,18 +57,21 @@ def save_augmentations(image: Image.Image, base_path: str, base_name: str):
     original_path = os.path.join(base_path, f"{base_name}_original.jpg")
     image.save(original_path)
 
-    # Horizontal flip
-    h_flip = ImageOps.mirror(image)
-    h_flip.save(os.path.join(base_path, f"{base_name}_hflip.jpg"))
+    # Rotate 90 degrees to the left
+    left_90 = image.rotate(90, resample=Image.BICUBIC, expand=True)
+    left_90.save(os.path.join(base_path, f"{base_name}_rotate90_left.jpg"))
+
+    # Rotate 90 degrees to the right
+    right_90 = image.rotate(-90, resample=Image.BICUBIC, expand=True)
+    right_90.save(os.path.join(base_path, f"{base_name}_rotate90_right.jpg"))
+
+    # Rotate 180 degrees
+    rotated_180 = image.rotate(180, resample=Image.BICUBIC, expand=True)
+    rotated_180.save(os.path.join(base_path, f"{base_name}_rotate180.jpg"))
 
     # Vertical flip
     v_flip = ImageOps.flip(image)
     v_flip.save(os.path.join(base_path, f"{base_name}_vflip.jpg"))
-
-    # Random rotations
-    for i in range(1, 3):
-        rotated = image.rotate(random.randint(1, 359), resample=Image.BICUBIC, expand=True)
-        rotated.save(os.path.join(base_path, f"{base_name}_rotation{i}.jpg"))
 
 
 # Download and save an image without resizing, logging failures
@@ -76,14 +81,23 @@ async def download_and_save_image(url: str, image_id: str):
         try:
             response = await client.get(url, timeouts=TIMEOUT)
             if response.status_code == 200:
-                # Determine if this image belongs to train or test
-                subfolder = TRAIN_FOLDER if random.random() < SPLIT_RATIO else TEST_FOLDER
-                image_folder = os.path.join(subfolder, str(image_id))
+                # Save original image in dataset_artworks folder
+                image_folder = os.path.join(BASE_FOLDER, str(image_id))
                 os.makedirs(image_folder, exist_ok=True)
 
-                # Open image from bytes and save with augmentations
+                # Determine if this image belongs to train or test
+                subfolder = TRAIN_FOLDER if random.random() < SPLIT_RATIO else TEST_FOLDER
+                training_image_folder = os.path.join(subfolder, str(image_id))
+                os.makedirs(training_image_folder, exist_ok=True)
+
+                # Open image from bytes
                 img = Image.open(BytesIO(await response.content())).convert("RGB")
-                save_augmentations(img, image_folder, f"image_{url.split('/')[-1]}")
+                
+                # Save original image in dataset_artworks
+                img.save(os.path.join(image_folder, f"original.jpg"))
+
+                # Save augmented images in dataset_artworks_training
+                save_augmentations(img, training_image_folder, f"image_{url.split('/')[-1]}")
 
                 logging.info(f"Downloaded and augmented image for ID {image_id}")
 
