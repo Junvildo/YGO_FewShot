@@ -33,6 +33,8 @@ import time
 from extract_features import extract_feature
 from retrieval import evaluate_float_binary_embedding_faiss
 from itertools import chain
+import random
+import numpy as np
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -145,7 +147,7 @@ def main(args):
     for epoch in range(args.pretrain_epochs):
         begin = time.time()
         epoch_loss = 0.0
-        for i, (im, instance_label, _) in enumerate(train_loader):
+        for i, (im, instance_label, index) in enumerate(train_loader):
             opt.zero_grad()
 
             im = im.to(device=device, non_blocking=True)
@@ -269,6 +271,16 @@ if __name__ == '__main__':
     parser.add_argument("--num_steps", type=int, default=3, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
+
+    # Reduce randomness
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(42)
+        torch.cuda.manual_seed(42)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
     args = parser.parse_args()
     print(args)

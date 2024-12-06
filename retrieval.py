@@ -92,7 +92,7 @@ def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query
     output_file = output + '_identity.eval'
     #general_eval_str = "Float: R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
     #    r_at_k_f[0], r_at_k_f[9], r_at_k_f[19], r_at_k_f[29], r_at_k_f[39], r_at_k_f[49])
-    general_eval_str = "Float: R@1: {:.2f} \\\\".format(r_at_k_f[0])
+    general_eval_str = "Float: R@1, R@10: {:.2f} & {:.2f} \\\\".format(r_at_k_f[0], r_at_k_f[9])
 
     print(general_eval_str)
     with open(output_file, 'w') as of:
@@ -108,7 +108,7 @@ def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query
     output_file = output + '_binary.eval'
     # general_eval_str = "Binary: R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
     #     r_at_k_b[0], r_at_k_b[9], r_at_k_b[19], r_at_k_b[29], r_at_k_b[39], r_at_k_b[49])
-    general_eval_str = "Binary: R@1: {:.2f} \\\\".format(r_at_k_b[0])
+    general_eval_str = "Binary: R@1, R@10: {:.2f} & {:.2f} \\\\".format(r_at_k_b[0], r_at_k_b[9])
 
     print(general_eval_str)
     with open(output_file, 'w') as of:
