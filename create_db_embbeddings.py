@@ -8,31 +8,35 @@ from collections import defaultdict
 from models import EmbeddedFeatureWrapper
 from mobileone import mobileone, reparameterize_model
 from data import ImageDataset
+from util import calculate_mean_std
 
 # Model setup
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
-state_dict = torch.load("./finetuned_models/s2_56_epoch_45.pth", map_location=device, weights_only=True)
+state_dict = torch.load("./finetuned_models/s2_56_epoch_45_newest.pth", map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 model.load_state_dict(state_dict)
 model = model.to(device)
 model.eval()
-model_eval = reparameterize_model(model)
+# model_eval = reparameterize_model(model)
 
 # Transform setup
+# mean, std = calculate_mean_std("dataset_artworks_training", num_workers=0)
+mean = [0.485, 0.456, 0.406]
+std = [0.229, 0.224, 0.225]
 trans = transforms.Compose([
     transforms.Grayscale(num_output_channels=3),
     transforms.Resize((56, 56)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=mean, std=std)
 ])
 
 # Helper function to binarize embeddings
 def binarize_embeddings(embeddings):
-    return (embeddings > 0).astype(np.float32)
+    return (embeddings > 0)
 
 # Paths and labels setup
-image_dir = "dataset_artworks/train/"
+image_dir = "dataset_artworks"
 class_to_images = defaultdict(list)
 labels = []  # Fill this with class labels for each image path
 image_paths = []  # Fill this with the corresponding image paths
@@ -78,7 +82,7 @@ index = faiss.IndexFlatL2(dimension)
 labels = []
 
 for class_label, embedding in class_embeddings.items():
-    index.add(embedding.reshape(1, -1).astype(np.float32))
+    index.add(embedding.reshape(1, -1))
     labels.append(class_label)
 
 # Write index to disk

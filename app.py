@@ -10,6 +10,8 @@ import torch
 from torchvision import transforms
 from data import InferenceDataset
 from torch.utils.data import DataLoader
+from util import calculate_mean_std
+from PIL import Image
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -79,13 +81,13 @@ def get_model_outputs(numpy_arrays, model, batch_size, device, transform):
     # Move model to the specified device
     model = model.to(device)
     model.eval()  # Set model to evaluation mode
-    model_eval = reparameterize_model(model)
+    # model_eval = reparameterize_model(model)
 
     outputs = []
     with torch.no_grad():  # Disable gradient computation for inference
         for batch in dataloader:
             batch = batch.to(device)  # Move batch to device
-            batch_outputs = model_eval(batch)  # Get model predictions
+            batch_outputs = model(batch)  # Get model predictions
             outputs.append(batch_outputs.cpu())  # Store predictions, move to CPU
 
     # Concatenate all batches to get final output
@@ -125,17 +127,21 @@ def search_embeddings_with_faiss(query_embeddings, index, db_labels, k=1):
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
-state_dict = torch.load("./finetuned_models/s2_56_epoch_45.pth", map_location=device, weights_only=True)
+state_dict = torch.load("./finetuned_models/s2_56_epoch_45_newest.pth", map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 model.load_state_dict(state_dict)
+# mean, std = calculate_mean_std("dataset_artworks_training", num_workers=0)
+mean = [0.485, 0.456, 0.406]
+std = [0.229, 0.224, 0.225]
 trans = transforms.Compose([
     transforms.Grayscale(num_output_channels=3),
     transforms.Resize((56, 56)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=mean, std=std)
 ])
 # embeddings = np.load("embeddings.npy")
 # binary_db_embeddings = np.require(embeddings > 0, dtype='float32')
+arts_image = [Image.fromarray(art) for art in arts]
 outputs = get_model_outputs(arts, model, 8, device, trans)
 outputs = outputs.detach().numpy()
 binary_query_embeddings = np.require(outputs > 0, dtype='float32')

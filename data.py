@@ -161,7 +161,8 @@ class InferenceDataset(BaseDataset):
         image = self.numpy_arrays[idx]
         if self.transform:
             # Apply transformations (convert numpy to PIL image first)
-            image = self.transform(image = transforms.ToPILImage()(image))["image"]
+            image = Image.fromarray(image)
+            image = self.transform(image)
         return image
     
 class ImageDataset(BaseDataset):
@@ -179,15 +180,12 @@ class ImageDataset(BaseDataset):
         image_path = self.image_paths[idx]
         image = Image.open(image_path).convert('RGB')
         
-        # Convert the image to a NumPy array
-        image = np.array(image)
-        
         # Extract the folder name as the label
         label = os.path.basename(os.path.dirname(image_path))
         
         # Apply transformation if provided
         if self.transform:
-            image = self.transform(image=image)["image"]
+            image = self.transform(image)
         
         return image, label
 

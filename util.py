@@ -27,9 +27,9 @@ def plot_metrics(metric_values, title, ylabel, output_path):
     plt.close()
 
 # Function to calculate mean and std
-def calculate_mean_std(data_path: str):
+def calculate_mean_std(data_path: str, num_workers=4):
     data = ImageFolder(os.path.join(data_path, 'train'), transform=transforms.Compose([transforms.Resize((7, 7)), transforms.ToTensor()]))
-    loader = DataLoader(data, batch_size=2, shuffle=False, num_workers=4)
+    loader = DataLoader(data, batch_size=2, shuffle=False, num_workers=num_workers)
     mean = 0.0
     std = 0.0
     total_images_count = 0
