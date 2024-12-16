@@ -22,8 +22,8 @@ model.eval()
 
 # Transform setup
 # mean, std = calculate_mean_std("dataset_artworks_training", num_workers=0)
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
+mean = [0.49617722630500793, 0.46303924918174744, 0.46300116181373596]
+std = [0.1427406221628189, 0.13628196716308594, 0.13478131592273712]
 trans = transforms.Compose([
     transforms.Grayscale(num_output_channels=3),
     transforms.Resize((56, 56)),

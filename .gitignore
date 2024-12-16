@@ -12,6 +12,7 @@ failed_cards.txt
 failed_artworks/
 *.faiss
 *.txt
+dataset*.zip
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
