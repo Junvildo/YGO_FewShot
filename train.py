@@ -137,8 +137,10 @@ def main(args):
                           lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
 
     # Lists to store max_f and max_b for pretraining and finetuning
-    pretrain_max_f, pretrain_max_b = [], []
-    finetune_max_f, finetune_max_b = [], []
+    pretrain_max_r_f, pretrain_max_r_b = [], []
+    pretrain_max_p_f, pretrain_max_p_b = [], []
+    finetune_max_r_f, finetune_max_r_b = [], []
+    finetune_max_p_f, finetune_max_p_b = [], []
     pretrain_losses, finetune_losses = [], []
 
     log_every_n_step = args.log_per_n_steps
@@ -177,11 +179,14 @@ def main(args):
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            model.train()
 
             # Store max_f and max_b
-            pretrain_max_f.append(max_f)
-            pretrain_max_b.append(max_b)
+            finetune_max_r_f.append(max_r_f)
+            finetune_max_r_b.append(max_r_b)
+            finetune_max_p_f.append(max_p_f)
+            finetune_max_p_b.append(max_p_b)
 
     print("="*80)
     print("Pretraining finished")
@@ -231,22 +236,24 @@ def main(args):
         if (epoch + 1) % args.test_every_n_epochs == 0:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            max_f, max_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
             model.train()
 
             # Store max_f and max_b
-            finetune_max_f.append(max_f)
-            finetune_max_b.append(max_b)
+            finetune_max_r_f.append(max_r_f)
+            finetune_max_r_b.append(max_r_b)
+            finetune_max_p_f.append(max_p_f)
+            finetune_max_p_b.append(max_p_b)
     print("="*80)
     print("Finetuning finished")
     log_file.close()
 
     # Save plots
-    plot_metrics(pretrain_max_f, "Max F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_f.png"))
-    plot_metrics(pretrain_max_b, "Max B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_b.png"))
+    plot_metrics(pretrain_max_r_f, "Max F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_r_f.png"))
+    plot_metrics(pretrain_max_r_b, "Max B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_r_b.png"))
     plot_metrics(pretrain_losses, "Loss over Pretraining Epochs", "Loss", os.path.join(output_directory, "pretrain_loss.png"))
-    plot_metrics(finetune_max_f, "Max F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_f.png"))
-    plot_metrics(finetune_max_b, "Max B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_b.png"))
+    plot_metrics(finetune_max_r_f, "Max F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_r_f.png"))
+    plot_metrics(finetune_max_r_b, "Max B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_r_b.png"))
     plot_metrics(finetune_losses, "Loss over Finetuning Epochs", "Loss", os.path.join(output_directory, "finetune_loss.png"))
 
 

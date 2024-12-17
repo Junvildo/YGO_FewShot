@@ -79,6 +79,44 @@ def evaluate_recall_at_k(dists, results, query_labels, db_labels, k):
 
     return recall_at_k / float(len(query_labels)) * 100.0
 
+def evaluate_precision_at_k(dists, results, query_labels, db_labels, k):
+    """
+        Evaluate Precision@k based on retrieval results.
+
+        Args:
+            dists:          numpy array of size [NUM_QUERY_IMAGES x k], distances of k nearest neighbors for each query
+            results:        numpy array of size [NUM_QUERY_IMAGES x k], indices of k nearest neighbors for each query
+            query_labels:   list of labels for each query
+            db_labels:      list of labels for each db
+            k:              number of nn results to evaluate
+
+        Returns:
+            precision_at_k: Precision@k in percentage
+    """
+    self_retrieval = query_labels is db_labels
+    expected_result_size = k + 1 if self_retrieval else k
+
+    assert results.shape[1] >= expected_result_size, \
+        "Not enough retrieved results to evaluate Precision@{}".format(k)
+
+    precision_at_k = np.zeros((k,))
+    for i in range(len(query_labels)):
+        relevant_count = 0
+        retrieved_count = 0
+        for j in range(k):
+            # Skip self-retrieval case (when query is identical to database entry)
+            if self_retrieval and i == results[i, j]:
+                continue
+            retrieved_count += 1
+            if query_labels[i] == db_labels[results[i, j]]:
+                relevant_count += 1
+            # Stop once we've evaluated k valid results
+            if retrieved_count == k:
+                break
+        precision_at_k += relevant_count / k
+
+    return precision_at_k / len(query_labels) * 100.0
+
 def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query_labels, db_labels,
                                           output, k=1000):
     """
@@ -88,15 +126,18 @@ def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query
     # Float embedding evaluation
     dists, retrieved_result_indices = _retrieve_knn_faiss_inner_product(query_embeddings, db_embeddings, k)
     r_at_k_f = evaluate_recall_at_k(dists, retrieved_result_indices, query_labels, db_labels, k)
+    p_at_k_f = evaluate_precision_at_k(dists, retrieved_result_indices, query_labels, db_labels, k)
 
     output_file = output + '_identity.eval'
-    #general_eval_str = "Float: R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
+    #general_r_eval_str = "Float: R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
     #    r_at_k_f[0], r_at_k_f[9], r_at_k_f[19], r_at_k_f[29], r_at_k_f[39], r_at_k_f[49])
-    general_eval_str = "Float: R@1, R@10: {:.2f} & {:.2f} \\\\".format(r_at_k_f[0], r_at_k_f[9])
+    general_r_eval_str = "Float: R@1, R@10: {:.2f} & {:.2f} \\\\".format(r_at_k_f[0], r_at_k_f[9])
+    general_p_eval_str = "Float: P@1, P@10: {:.2f} & {:.2f} \\\\".format(p_at_k_f[0], p_at_k_f[9])
 
-    print(general_eval_str)
+    print(general_r_eval_str)
+    print(general_p_eval_str)
     with open(output_file, 'w') as of:
-        of.write(general_eval_str + '\n')
+        of.write(general_r_eval_str + '\n' + general_p_eval_str + '\n')
 
     # Binary embedding evaluation
     binary_query_embeddings = np.require(query_embeddings > 0, dtype='float32')
@@ -104,14 +145,17 @@ def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query
 
     dists, retrieved_result_indices = _retrieve_knn_faiss_euclidean(binary_query_embeddings, binary_db_embeddings, k)
     r_at_k_b = evaluate_recall_at_k(dists, retrieved_result_indices, query_labels, db_labels, k)
+    p_at_k_b = evaluate_precision_at_k(dists, retrieved_result_indices, query_labels, db_labels, k)
 
     output_file = output + '_binary.eval'
-    # general_eval_str = "Binary: R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
+    # general_r_eval_str = "Binary: R@1, R@10, R@20, R@30, R@40, R@50: {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\\\".format(
     #     r_at_k_b[0], r_at_k_b[9], r_at_k_b[19], r_at_k_b[29], r_at_k_b[39], r_at_k_b[49])
-    general_eval_str = "Binary: R@1, R@10: {:.2f} & {:.2f} \\\\".format(r_at_k_b[0], r_at_k_b[9])
+    general_r_eval_str = "Binary: R@1, R@10: {:.2f} & {:.2f} \\\\".format(r_at_k_b[0], r_at_k_b[9])
+    general_p_eval_str = "Binary: P@1, P@10: {:.2f} & {:.2f} \\\\".format(p_at_k_b[0], p_at_k_b[9])
 
-    print(general_eval_str)
+    print(general_r_eval_str)
+    print(general_p_eval_str)
     with open(output_file, 'w') as of:
-        of.write(general_eval_str + '\n')
+        of.write(general_r_eval_str + '\n' + general_p_eval_str + '\n')
 
-    return r_at_k_f[0], r_at_k_b[0]
+    return r_at_k_f[0], r_at_k_b[0], p_at_k_f[0], p_at_k_b[0]
