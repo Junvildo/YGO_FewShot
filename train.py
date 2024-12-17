@@ -249,11 +249,15 @@ def main(args):
     log_file.close()
 
     # Save plots
-    plot_metrics(pretrain_max_r_f, "Max F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_r_f.png"))
-    plot_metrics(pretrain_max_r_b, "Max B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_r_b.png"))
+    plot_metrics(pretrain_max_r_f, "Max Recall F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_r_f.png"))
+    plot_metrics(pretrain_max_r_b, "Max Racall B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_r_b.png"))
+    plot_metrics(pretrain_max_p_f, "Max Precision F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_p_f.png"))
+    plot_metrics(pretrain_max_p_b, "Max Precision B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_p_b.png"))
     plot_metrics(pretrain_losses, "Loss over Pretraining Epochs", "Loss", os.path.join(output_directory, "pretrain_loss.png"))
-    plot_metrics(finetune_max_r_f, "Max F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_r_f.png"))
-    plot_metrics(finetune_max_r_b, "Max B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_r_b.png"))
+    plot_metrics(finetune_max_r_f, "Max Recall F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_r_f.png"))
+    plot_metrics(finetune_max_r_b, "Max Recall B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_r_b.png"))
+    plot_metrics(finetune_max_p_f, "Max Precision F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_p_f.png"))
+    plot_metrics(finetune_max_p_b, "Max Precision B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_p_b.png"))
     plot_metrics(finetune_losses, "Loss over Finetuning Epochs", "Loss", os.path.join(output_directory, "finetune_loss.png"))
 
 
