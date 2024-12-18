@@ -68,9 +68,12 @@ def main(args):
 
     # Calculate mean and std of data
     if args.pretrain_path != "":
-        mean, std = calculate_mean_std(data_path=args.dataset_root)
+        mean, std = calculate_mean_std(data_path=args.dataset_root, img_size=args.img_size)
     else:
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
+    
+    log_and_print('Mean: {}'.format(mean), log_file)
+    log_and_print('Std: {}'.format(std), log_file)
 
 
     # Setup train and eval transformations
@@ -127,10 +130,6 @@ def main(args):
 
     # Training mode
     model.train()
-    # Start with pretraining where we finetune only new parameters to warm up
-    # opt = torch.optim.SGD(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
-    #                                                         set(model.module.feature.parameters())),
-    #                       lr=args.lr * args.lr_mult, momentum=0.9, weight_decay=1e-4)
 
     opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
                                                             set(model.module.feature.parameters())),
