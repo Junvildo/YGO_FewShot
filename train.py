@@ -20,7 +20,7 @@ Training process:
 from argparse import ArgumentParser
 import torch
 import os
-from util import calculate_mean_std, log_and_print, plot_metrics
+from util import log_and_print, plot_metrics
 from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
 from torchvision import transforms
@@ -66,14 +66,8 @@ def main(args):
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
-    # Calculate mean and std of data
-    if args.pretrain_path != "":
-        mean, std = calculate_mean_std(data_path=args.dataset_root, img_size=args.img_size)
-    else:
-        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
-    
-    log_and_print('Mean: {}'.format(mean), log_file)
-    log_and_print('Std: {}'.format(std), log_file)
+
+    mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
 
 
     # Setup train and eval transformations
@@ -148,7 +142,7 @@ def main(args):
     for epoch in range(args.pretrain_epochs):
         begin = time.time()
         epoch_loss = 0.0
-        for i, (im, instance_label, index) in enumerate(train_loader):
+        for i, (im, instance_label, _) in enumerate(train_loader):
             opt.zero_grad()
 
             im = im.to(device=device, non_blocking=True)
@@ -164,7 +158,6 @@ def main(args):
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
                 log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
-                # log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
         
         average_loss = epoch_loss / max(1, len(train_loader))
         pretrain_losses.append(average_loss)
@@ -201,7 +194,6 @@ def main(args):
         adjust_learning_rate(opt, epoch, args.epochs_per_step, gamma=args.gamma)
         
         epoch_loss = 0.0
-        # for i, (im, _, instance_label, index) in enumerate(train_loader):
         for i, (im, instance_label, _) in enumerate(train_loader):
 
             opt.zero_grad()
@@ -219,7 +211,6 @@ def main(args):
             epoch_loss += loss.mean().item()
             if (i + 1) % log_every_n_step == 0:
                 log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
-                # log_and_print(f'Data: {forward - data}\tForward: {back - forward}\tBackward: {end - back}\tBatch: {end - data}', log_file)
 
         average_loss = epoch_loss / max(1, len(train_loader))
         finetune_losses.append(average_loss)
