@@ -175,10 +175,10 @@ def main(args):
             model.train()
 
             # Store max_f and max_b
-            finetune_max_r_f.append(max_r_f)
-            finetune_max_r_b.append(max_r_b)
-            finetune_max_p_f.append(max_p_f)
-            finetune_max_p_b.append(max_p_b)
+            pretrain_max_r_f.append(max_r_f)
+            pretrain_max_r_b.append(max_r_b)
+            pretrain_max_p_f.append(max_p_f)
+            pretrain_max_p_b.append(max_p_b)
 
     print("="*80)
     print("Pretraining finished")
