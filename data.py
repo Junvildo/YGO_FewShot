@@ -6,6 +6,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset as BaseDataset
 import numpy as np
 import torch
+import json
 
 class Dataset(object):
     """
@@ -77,7 +78,12 @@ class CustomDataset(Dataset):
 
     @property
     def image_root_dir(self):
-        return os.path.join(self.root, 'train' if self.train else 'test')
+        if self.train:
+            return os.path.join(self.root, 'train')
+        elif os.path.isdir(os.path.join(self.root, 'test')):
+            return os.path.join(self.root, 'test')
+        else:
+            return self.root
 
     @property
     def num_cls(self):
@@ -90,6 +96,11 @@ class CustomDataset(Dataset):
     @property
     def class_labels_list(self):
         return self.class_labels
+
+    @property
+    def label_to_classname(self):
+        """Generate a dictionary mapping labels to class names."""
+        return {v: k for k, v in self.class_map.items()}
 
     def _load(self):
         self.class_map = {}
@@ -122,26 +133,9 @@ class CustomDataset(Dataset):
         class_target = self.class_labels[index]
         return im, class_target, index
 
-    # def __getitem__(self, idx):
-    #     Open the image
-    #     img_path = self.image_paths[idx]
-    #     image = Image.open(img_path).convert('RGB')
-        
-    #     Convert the image to a NumPy array
-    #     image = np.asarray(image)
-        
-    #     Extract the folder name as the label
-    #     label = self.class_labels[idx]
-        
-    #     Apply transformation if provided
-    #     if self.transform:
-    #         image = self.transform(image=image)["image"]
-        
-    #     return image, label
-
-
     def __len__(self):
         return len(self.image_paths)
+
 
 
 class InferenceDataset(BaseDataset):
@@ -166,9 +160,8 @@ class InferenceDataset(BaseDataset):
         return image
     
 class ImageDataset(BaseDataset):
-    def __init__(self, image_paths, labels, transform):
+    def __init__(self, image_paths, transform):
         self.image_paths = image_paths
-        self.labels = labels
         self.transform = transform
 
     def __len__(self):
@@ -193,11 +186,11 @@ class ImageDataset(BaseDataset):
 
 if __name__ == '__main__':
     # Load the training set
-    data_path = 'dataset_artworks'
+    data_path = 'dataset_artworks_training'
     custom_train_set = CustomDataset(data_path, train=True)
     print("Loaded {} samples for dataset {}".format(len(custom_train_set), custom_train_set.name))
     for i in random.sample(range(0, len(custom_train_set)), 5):
-        image, label = custom_train_set[i]
+        image, label, _ = custom_train_set[i]
         print("Image: {} | Label: {} | Class Name: {}".format(
             custom_train_set.image_paths[i], label, list(custom_train_set.class_map.keys())[label]))
 
@@ -205,6 +198,20 @@ if __name__ == '__main__':
     custom_test_set = CustomDataset(data_path, train=False)
     print("Loaded {} samples for dataset {}".format(len(custom_test_set), custom_test_set.name))
     for i in random.sample(range(0, len(custom_test_set)), 5):
-        image, label = custom_test_set[i]
+        image, label, _ = custom_test_set[i]
         print("Image: {} | Label: {} | Class Name: {}".format(
             custom_test_set.image_paths[i], label, list(custom_test_set.class_map.keys())[label]))
+
+    # Access the label-to-classname dictionary
+    label_to_classname_dict = custom_test_set.label_to_classname
+
+    # Print the dictionary
+    print(label_to_classname_dict)
+
+    # Get a class name for a specific label
+    label = 0  # Replace with the label you want to query
+    classname = label_to_classname_dict.get(label, "Unknown")
+    print(f"Label {label} corresponds to class name: {classname}")
+
+    with open("label2id.json", "w") as outfile: 
+        json.dump(label_to_classname_dict, outfile)
