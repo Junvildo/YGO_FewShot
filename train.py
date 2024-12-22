@@ -114,7 +114,7 @@ def main(args):
                             num_workers=4)
 
     # Setup loss function
-    loss_fn = losses.NormSoftmaxLoss(args.dim, train_dataset.num_instance)
+    loss_fn = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
 
     model = torch.nn.DataParallel(model)
     model.to(device=device)
@@ -272,6 +272,7 @@ if __name__ == '__main__':
     parser.add_argument("--num_steps", type=int, default=3, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
+    parser.add_argument("--temperature", type=float, default=0.1, help="Temperature for norm softmax loss")
 
     # Reduce randomness
     random.seed(42)
