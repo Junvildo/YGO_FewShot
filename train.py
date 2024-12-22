@@ -117,13 +117,13 @@ def main(args):
     # Setup loss function
     if args.loss_fn == "normsoftmax":
         loss_fn = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
+        loss_fn = torch.nn.DataParallel(loss_fn)
+        model = torch.nn.DataParallel(model)
     else:
         loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=64, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
-    model = torch.nn.DataParallel(model)
     model.to(device=device)
 
-    loss_fn = torch.nn.DataParallel(loss_fn)
     loss_fn.to(device=device)
 
     # Training mode
@@ -154,8 +154,10 @@ def main(args):
 
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
-
-            loss.mean().backward()
+            if args.loss_fn == "normsoftmax":
+                loss.mean().backward()
+            else:
+                loss.backward()
             opt.step()
 
 
@@ -208,7 +210,10 @@ def main(args):
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
 
-            loss.mean().backward()
+            if args.loss_fn == "normsoftmax":
+                loss.mean().backward()
+            else:
+                loss.backward()
             opt.step()
 
 
