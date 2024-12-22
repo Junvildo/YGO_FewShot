@@ -45,7 +45,7 @@ def _retrieve_knn_faiss_euclidean(query_embeddings, db_embeddings, k):
 
 def evaluate_recall_at_k(dists, results, query_labels, db_labels, k):
     """
-        Evaluate Recall@k based on retrieval results.
+        Evaluate Recall@k based on retrieval results
 
         Args:
             dists:          numpy array of size [NUM_QUERY_IMAGES x k], distances of k nearest neighbors for each query
@@ -57,18 +57,25 @@ def evaluate_recall_at_k(dists, results, query_labels, db_labels, k):
         Returns:
             recall_at_k:    Recall@k in percentage
     """
-    self_retrieval = query_labels is db_labels
+
+    self_retrieval = False
+
+    if query_labels is db_labels:
+        self_retrieval = True
+
     expected_result_size = k + 1 if self_retrieval else k
 
     assert results.shape[1] >= expected_result_size, \
         "Not enough retrieved results to evaluate Recall@{}".format(k)
 
     recall_at_k = np.zeros((k,))
+
     for i in range(len(query_labels)):
-        pos = 0
-        j = 0
+        pos = 0 # keep track recall at pos
+        j = 0 # looping through results
         while pos < k:
             if self_retrieval and i == results[i, j]:
+                # Only skip the document when query and index sets are the exact same
                 j += 1
                 continue
             if query_labels[i] == db_labels[results[i, j]]:
@@ -77,45 +84,51 @@ def evaluate_recall_at_k(dists, results, query_labels, db_labels, k):
             j += 1
             pos += 1
 
-    return recall_at_k / float(len(query_labels)) * 100.0
+    return recall_at_k/float(len(query_labels))*100.0
 
 def evaluate_precision_at_k(dists, results, query_labels, db_labels, k):
     """
-        Evaluate Precision@k based on retrieval results.
+    Evaluate Precision@k based on retrieval results
 
-        Args:
-            dists:          numpy array of size [NUM_QUERY_IMAGES x k], distances of k nearest neighbors for each query
-            results:        numpy array of size [NUM_QUERY_IMAGES x k], indices of k nearest neighbors for each query
-            query_labels:   list of labels for each query
-            db_labels:      list of labels for each db
-            k:              number of nn results to evaluate
+    Args:
+        dists:          numpy array of size [NUM_QUERY_IMAGES x k], distances of k nearest neighbors for each query
+        results:        numpy array of size [NUM_QUERY_IMAGES x k], indices of k nearest neighbors for each query
+        query_labels:   list of labels for each query
+        db_labels:      list of labels for each db
+        k:              number of nn results to evaluate
 
-        Returns:
-            precision_at_k: Precision@k in percentage
+    Returns:
+        precision_at_k: Precision@k in percentage
     """
-    self_retrieval = query_labels is db_labels
-    expected_result_size = k + 1 if self_retrieval else k
 
+    self_retrieval = False
+    if query_labels is db_labels:
+        self_retrieval = True
+
+    expected_result_size = k + 1 if self_retrieval else k
     assert results.shape[1] >= expected_result_size, \
         "Not enough retrieved results to evaluate Precision@{}".format(k)
 
-    precision_at_k = np.zeros((k,))
-    for i in range(len(query_labels)):
-        relevant_count = 0
-        retrieved_count = 0
-        for j in range(k):
-            # Skip self-retrieval case (when query is identical to database entry)
-            if self_retrieval and i == results[i, j]:
-                continue
-            retrieved_count += 1
-            if query_labels[i] == db_labels[results[i, j]]:
-                relevant_count += 1
-            # Stop once we've evaluated k valid results
-            if retrieved_count == k:
-                break
-        precision_at_k += relevant_count / k
+    precision_at_k = 0  # Counter for relevant retrieved items
 
-    return precision_at_k / len(query_labels) * 100.0
+    for i in range(len(query_labels)):
+        relevant_retrieved = 0  # Counter for relevant items in top k
+        total_retrieved = 0  # Counter for items considered in top k
+
+        for j in range(k):
+            if self_retrieval and i == results[i, j]:
+                # Skip self-retrieval only when query and database are identical
+                continue
+
+            total_retrieved += 1
+            if query_labels[i] == db_labels[results[i, j]]:
+                relevant_retrieved += 1
+
+        precision_at_k += relevant_retrieved / total_retrieved if total_retrieved > 0 else 0
+
+    # Compute average precision across all queries
+    return (precision_at_k / len(query_labels)) * 100.0
+
 
 def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query_labels, db_labels,
                                           output, k=1000):
