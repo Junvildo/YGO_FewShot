@@ -102,32 +102,34 @@ def evaluate_precision_at_k(dists, results, query_labels, db_labels, k):
     """
 
     self_retrieval = False
+
     if query_labels is db_labels:
         self_retrieval = True
 
     expected_result_size = k + 1 if self_retrieval else k
+
     assert results.shape[1] >= expected_result_size, \
         "Not enough retrieved results to evaluate Precision@{}".format(k)
 
-    precision_at_k = 0  # Counter for relevant retrieved items
+    precision_at_k = np.zeros((k,))
 
     for i in range(len(query_labels)):
-        relevant_retrieved = 0  # Counter for relevant items in top k
-        total_retrieved = 0  # Counter for items considered in top k
-
-        for j in range(k):
+        pos = 0  # Tracks position in precision evaluation
+        relevant_count = 0  # Counts relevant items in top k
+        j = 0  # Iterates through results
+        while pos < k:
             if self_retrieval and i == results[i, j]:
-                # Skip self-retrieval only when query and database are identical
+                # Skip the document when query and index sets are the same
+                j += 1
                 continue
-
-            total_retrieved += 1
             if query_labels[i] == db_labels[results[i, j]]:
-                relevant_retrieved += 1
+                relevant_count += 1
+            pos += 1
+            j += 1
+        precision_at_k[pos - 1] += relevant_count / k
 
-        precision_at_k += relevant_retrieved / total_retrieved if total_retrieved > 0 else 0
-
-    # Compute average precision across all queries
     return precision_at_k / float(len(query_labels)) * 100.0
+
 
 
 def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query_labels, db_labels,
