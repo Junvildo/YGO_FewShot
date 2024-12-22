@@ -18,6 +18,7 @@ class ArcFace(nn.Module):
         """
         super().__init__()
         self.variant = variant
+        self.device = device
         self.scale = scale
         self.margin = margin
         self.ce = nn.CrossEntropyLoss()
@@ -52,7 +53,7 @@ class ArcFace(nn.Module):
         else:
             phi = torch.where(cos_theta > self.th, phi, cos_theta - self.mm)
         # --------------------------- convert label to one-hot ---------------------------
-        one_hot = torch.zeros(cos_theta.size(), device='cpu')
+        one_hot = torch.zeros(cos_theta.size(), device=self.device)
         one_hot.scatter_(1, ground_truth.view(-1, 1).long(), 1)
         # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
         output = (one_hot * phi) + (
