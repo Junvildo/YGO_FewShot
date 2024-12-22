@@ -127,7 +127,7 @@ def evaluate_precision_at_k(dists, results, query_labels, db_labels, k):
         precision_at_k += relevant_retrieved / total_retrieved if total_retrieved > 0 else 0
 
     # Compute average precision across all queries
-    return (precision_at_k / len(query_labels)) * 100.0
+    return precision_at_k / float(len(query_labels)) * 100.0
 
 
 def evaluate_float_binary_embedding_faiss(query_embeddings, db_embeddings, query_labels, db_labels,
