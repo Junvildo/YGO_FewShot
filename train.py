@@ -35,6 +35,7 @@ from retrieval import evaluate_float_binary_embedding_faiss
 from itertools import chain
 import random
 import numpy as np
+import arcface
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -114,7 +115,10 @@ def main(args):
                             num_workers=4)
 
     # Setup loss function
-    loss_fn = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
+    if args.loss_fn == "normsoftmax":
+        loss_fn = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
+    else:
+        loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=64, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
     model = torch.nn.DataParallel(model)
     model.to(device=device)
@@ -256,20 +260,22 @@ if __name__ == '__main__':
     # Optional arguments for the launch helper
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
-    parser.add_argument("--batch_size", type=int, default=75, help="Batch size for training")
-    parser.add_argument("--log_per_n_steps", type=int, default=1000, help="Log every N steps")
-    parser.add_argument("--img_size", type=int, default=224, help="Image size for training")
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
+    parser.add_argument("--log_per_n_steps", type=int, default=100, help="Log every N steps")
+    parser.add_argument("--img_size", type=int, default=56, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
-    parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
+    parser.add_argument("--loss_fn", type=str, default="norm_softmax", help="Loss function (norm_softmax, arcface)")
+    parser.add_argument("--loss_variant", type=int, default=1, help="ArcFace loss variant (1, 2, 3)")
+    parser.add_argument("--lr", type=float, default=0.001, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
     parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
-    parser.add_argument("--epochs_per_step", type=int, default=4, help="Epochs for learning rate step")
-    parser.add_argument("--pretrain_epochs", type=int, default=5, help="Epochs for pretraining")
-    parser.add_argument("--num_steps", type=int, default=3, help="Num steps to take")
+    parser.add_argument("--epochs_per_step", type=int, default=2, help="Epochs for learning rate step")
+    parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
+    parser.add_argument("--num_steps", type=int, default=2, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
     parser.add_argument("--temperature", type=float, default=0.1, help="Temperature for norm softmax loss")
