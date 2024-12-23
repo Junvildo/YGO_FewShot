@@ -1,18 +1,19 @@
 main_dataset/
 .vscode/
 output/
-mobileone*.tar
+*.tar
 finetuned_models/
 real_life_images/
 yolo_detected/
-embeddings.npy
 dataset_artworks*/
 download_log_artworks*.txt
 failed_cards.txt
 failed_artworks/
 *.faiss
 *.txt
-dataset*.zip
+*.zip
+*.json
+dataset*/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
