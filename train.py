@@ -73,15 +73,17 @@ def main(args):
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
+        # transforms.Grayscale(num_output_channels=3),
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
         transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomVerticalFlip(p=0.5),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std),
     ])
     eval_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
+        # transforms.Grayscale(num_output_channels=3),
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std),
@@ -120,7 +122,7 @@ def main(args):
         loss_fn = torch.nn.DataParallel(loss_fn)
         model = torch.nn.DataParallel(model)
     else:
-        loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=64, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
+        loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=30, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
     model.to(device=device)
 
@@ -181,7 +183,7 @@ def main(args):
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=10)
+            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
             model.train()
 
             # Store max_f and max_b
@@ -242,7 +244,7 @@ def main(args):
         if (epoch + 1) % args.test_every_n_epochs == 0:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=10)
+            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
             model.train()
 
             # Store max_f and max_b
