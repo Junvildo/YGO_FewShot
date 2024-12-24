@@ -11,7 +11,7 @@ from torchvision import transforms
 from data import InferenceDataset
 from torch.utils.data import DataLoader
 from PIL import Image
-import json
+from data import CustomDataset
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -31,7 +31,8 @@ for i, (box, conf) in enumerate(zip(results[0].boxes.xyxy, results[0].boxes.conf
     if conf >= 0.5:  # Filter by confidence (greater than 50%)
         x1, y1, x2, y2 = map(int, box)  # Extract bounding box coordinates
         # Crop the detected object from the image
-        cards.append(field_image[round(y1*0.98):round(y2*1.02), round(x1*0.98):round(x2*1.02)])
+        # cards.append(field_image[round(y1*0.98):round(y2*1.02), round(x1*0.98):round(x2*1.02)])
+        cards.append(field_image[round(y1-2):round(y2+2), round(x1-2):round(x2+2)])
 
 preprocessed_cards = []
 for card in cards:
@@ -39,7 +40,7 @@ for card in cards:
 
 arts = []
 for card in preprocessed_cards:
-    art = extract_artwork(card, thresh_val=180, img_size=128)
+    art = extract_artwork(card, thresh_val=180, img_size=56)
     if art is not None:
         arts.append(art)
     else:
@@ -50,7 +51,7 @@ for card in preprocessed_cards:
 # Concatenate all detected cards into one big image
 resized_cards = []
 for card in cards:
-    resized_cards.append(cv2.resize(card, (128, 128)))
+    resized_cards.append(cv2.resize(card, (56, 56)))
 big_card_image = np.concatenate(resized_cards, axis=1)
 
 arts_batch = []
@@ -82,7 +83,6 @@ def get_model_outputs(numpy_arrays, model, batch_size, device, transform):
     model = model.to(device)
     model.eval()  # Set model to evaluation mode
     model_eval = reparameterize_model(model)
-    # model_eval = reparameterize_model(model)
 
     outputs = []
     with torch.no_grad():  # Disable gradient computation for inference
@@ -98,35 +98,47 @@ def get_model_outputs(numpy_arrays, model, batch_size, device, transform):
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
-state_dict = torch.load("finetuned_models/s2_224_color_resize.pth", map_location=device, weights_only=True)
+state_dict = torch.load("finetuned_models/s2_56_grayscale.pth", map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 model.load_state_dict(state_dict)
-mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+mean, std = [0.39111483097076416, 0.38889095187187195, 0.38865992426872253], [0.30603259801864624, 0.306450754404068, 0.30432021617889404]
 trans = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((56, 56)),
     transforms.ToTensor(),
     transforms.Normalize(mean=mean, std=std)
 ])
+data_root = "dataset"
+base_dataset = CustomDataset(root=data_root, train=True, transform=trans)
+
+base_loader = DataLoader(base_dataset,
+                        batch_size=16,
+                        drop_last=False,
+                        shuffle=False,
+                        pin_memory=True,
+                        num_workers=0)
 arts_image = [Image.fromarray(art) for art in arts]
 outputs = get_model_outputs(arts, model, 8, device, trans)
 outputs = outputs.detach().numpy()
 binary_query_embeddings = np.require(outputs > 0, dtype='float32')
 # Load the FAISS index and labels
 faiss_index_file = "class_embeddings.faiss"
-label2name_file = "label2name.json"
 index = faiss.IndexFlatL2(2048)
 index = faiss.read_index(faiss_index_file)
 
-with open(label2name_file, 'r') as f:    
-    label2name = json.load(f)
 
-distances, indices = index.search(binary_query_embeddings, 5)
-print(indices)
+distances, indices = index.search(binary_query_embeddings, 4)
 
-for idx, dis in zip(indices, distances):
-    print("Top 5 matches:")
-    for id, distance in zip(idx, dis):
-        print(label2name[str(id)], distance)
+k_similar_images = [indice for indice in indices]
+
+for i in range(len(k_similar_images)):
+    print(str(i)+"\t", end="="*20+"\n")
+    images_name = [base_dataset.label_to_classname[base_dataset.class_labels_list[j]] for j in k_similar_images[i]]
+    images_path = ['https://images.ygoprodeck.com/images/cards_cropped/{}.jpg'.format(image_name) for image_name in images_name]
+    for url in images_path:
+        print(url)
+
+
+
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
