@@ -85,8 +85,8 @@ def main(args):
         transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),  # Random perspective shifts
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2),  # Block parts of the image
         transforms.ToTensor(),  # Convert to Tensor
+        transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2),  # Block parts of the image
     ])
     eval_transform = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
