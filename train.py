@@ -24,6 +24,7 @@ from util import log_and_print, plot_metrics, calculate_mean_std
 from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
 from torchvision import transforms
+from torchvision.transforms import v2
 from torch.utils.data import DataLoader
 from sampler import ClassBalancedBatchSampler
 from data import CustomDataset
@@ -48,6 +49,18 @@ def adjust_learning_rate(optimizer, epoch, epochs_per_step, gamma=0.1):
             param_group['lr'] *= gamma
             print("learning rate adjusted: {}".format(param_group['lr']))
 
+class AddGaussianNoise:
+    """Custom transform to add Gaussian noise."""
+    def __init__(self, mean=0.0, std=0.1):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, img):
+        tensor_img = transforms.ToTensor()(img)
+        noise = torch.randn(tensor_img.size()) * self.std + self.mean
+        noisy_img = torch.clamp(tensor_img + noise, 0, 1)
+        return transforms.ToPILImage()(noisy_img)
+
 def main(args):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -68,16 +81,24 @@ def main(args):
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
 
+    NUM_CLASSES = len(os.listdir(os.path.join(args.train_dataset, "train")))
 
+    cutmix = v2.CutMix(num_classes=NUM_CLASSES)
+    mixup = v2.MixUp(num_classes=NUM_CLASSES)
+    cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
-        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),
+        # Resize and Normalize
+        transforms.RandomResizedCrop((args.img_size, args.img_size)),
+        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),  # Adjust color and brightness
+        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.2),  # Simulate blur
+        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),  # Random perspective shifts
+        transforms.RandomApply([AddGaussianNoise(mean=0, std=0.05)], p=0.2),  # Add Gaussian noise
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
-        transforms.ToTensor(),
+        transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2),  # Block parts of the image
+        transforms.ToTensor(),  # Convert to Tensor
     ])
     eval_transform = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
@@ -155,6 +176,8 @@ def main(args):
         for i, (im, instance_label, _) in enumerate(train_loader):
             opt.zero_grad()
 
+            im, instance_label = cutmix_or_mixup(im, instance_label)
+
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
 
@@ -212,6 +235,8 @@ def main(args):
         for i, (im, instance_label, _) in enumerate(train_loader):
 
             opt.zero_grad()
+
+            im, instance_label = cutmix_or_mixup(im, instance_label)
 
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
