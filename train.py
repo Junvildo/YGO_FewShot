@@ -20,7 +20,7 @@ Training process:
 from argparse import ArgumentParser
 import torch
 import os
-from util import log_and_print, plot_metrics
+from util import log_and_print, plot_metrics, calculate_mean_std
 from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
 from torchvision import transforms
@@ -72,7 +72,6 @@ def main(args):
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
         transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),
@@ -81,15 +80,14 @@ def main(args):
         transforms.ToTensor(),
     ])
     eval_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=3),
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ToTensor(),
     ])
 
-    if args.pretrain_path != "":
-        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean and std
-        train_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
-        eval_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
+    mean, std = calculate_mean_std(train_loader, train_transform, device)
+    log_and_print("mean, std = {mean}, {std}".format(mean=mean, std=std), log_file)
+    train_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
+    eval_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
 
     # Setup dataset
     train_dataset = CustomDataset(root=args.dataset_root, train=True, transform=train_transform)
