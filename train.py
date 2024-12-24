@@ -105,7 +105,8 @@ def main(args):
         transforms.ToTensor(),
     ])
 
-    mean, std = calculate_mean_std(os.path.join(args.dataset_root, "train"), train_transform, device)
+    # mean, std = calculate_mean_std(os.path.join(args.dataset_root, "train"), train_transform, device)
+    mean, std = [0.39111483097076416, 0.38889095187187195, 0.38865992426872253], [0.30603259801864624, 0.306450754404068, 0.30432021617889404]
     log_and_print("mean, std = {mean}, {std}".format(mean=mean, std=std), log_file)
     train_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
     eval_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
