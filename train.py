@@ -70,7 +70,7 @@ def main(args):
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
 
-    NUM_CLASSES = len(os.listdir(os.path.join(args.dataset_root, "train")))
+    NUM_CLASSES = 53380
 
     cutmix = v2.CutMix(num_classes=NUM_CLASSES)
     mixup = v2.MixUp(num_classes=NUM_CLASSES)
