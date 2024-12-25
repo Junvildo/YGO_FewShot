@@ -190,13 +190,8 @@ def main(args):
 
     # Full end-to-end finetune of all parameters
     model.train()
-    if args.loss_fn == "norm_softmax":
-        if device != "cpu":
-            opt = torch.optim.AdamW(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
-        else:
-            opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
-    else:
-        opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
+
+    opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
     print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
     print("="*80)
     for epoch in range(args.epochs_per_step * args.num_steps):
