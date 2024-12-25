@@ -20,13 +20,11 @@ class NormSoftmaxLoss(nn.Module):
         self.weight.data.uniform_(-stdv, stdv)
 
         self.temperature = temperature
-        # self.loss_fn = nn.CrossEntropyLoss()
-        self.loss_fn = nn.BCEWithLogitsLoss()
+        self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, embeddings, instance_targets):
         norm_weight = nn.functional.normalize(self.weight, dim=1)
 
         prediction_logits = nn.functional.linear(embeddings, norm_weight)
-
         loss = self.loss_fn(prediction_logits / self.temperature, instance_targets)
         return loss
