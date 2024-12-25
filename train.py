@@ -69,13 +69,6 @@ def main(args):
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
-
-    NUM_CLASSES = len(os.listdir(os.path.join(args.dataset_root, 'train')))*4
-
-    cutmix = v2.CutMix(num_classes=NUM_CLASSES)
-    mixup = v2.MixUp(num_classes=NUM_CLASSES)
-    cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
-
     # Setup train and eval transformations
     train_transform = transforms.Compose([
         # Resize and Normalize
@@ -101,6 +94,12 @@ def main(args):
     # Setup dataset
     train_dataset = CustomDataset(root=args.dataset_root, train=True, transform=train_transform)
     eval_dataset = CustomDataset(root=args.dataset_root, train=False, transform=eval_transform)
+
+    NUM_CLASSES = train_dataset.num_instance
+
+    cutmix = v2.CutMix(num_classes=NUM_CLASSES)
+    mixup = v2.MixUp(num_classes=NUM_CLASSES)
+    cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
 
     # Setup dataset loader
     if args.class_balancing:
@@ -139,8 +138,8 @@ def main(args):
 
     # Training mode
     model.train()
-    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
-                                                            set(model.module.feature.parameters())),
+    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
+                                                            set(model.feature.parameters())),
                         lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
 
     # Lists to store max_f and max_b for pretraining and finetuning
