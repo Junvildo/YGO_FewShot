@@ -1,10 +1,10 @@
 import argparse
 
 parser = argparse.ArgumentParser(description='create db embeddings')
-parser.add_argument('--model-path', type=str, required=True, help='path to model checkpoint')
-parser.add_argument('--is-train', action='store_true', help='whether to use the training set to create db embeddings')
-parser.add_argument('--image-dir', type=str, required=True, help='path to image directory')
-parser.add_argument('--batch-size', type=int, default=32, help='batch size for data loader')
+parser.add_argument('--model_path', type=str, required=True, help='path to model checkpoint')
+parser.add_argument('--is_train', action='store_true', help='whether to use the training set to create db embeddings')
+parser.add_argument('--image_dir', type=str, required=True, help='path to image directory')
+parser.add_argument('--batch_size', type=int, default=32, help='batch size for data loader')
 parser.add_argument('--image_size', type=int, default=56, help='image size for data loader')
 parser.add_argument('--num_workers', type=int, default=4, help='number of workers for data loader')
 
