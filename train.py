@@ -131,28 +131,17 @@ def main(args):
     else:
         loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=30, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
-    if device != "cpu":
-        loss_fn = torch.nn.DataParallel(loss_fn)
-        model = torch.nn.DataParallel(model)
+
+    model = torch.nn.DataParallel(model)
     model.to(device=device)
 
     loss_fn.to(device=device)
 
     # Training mode
     model.train()
-    if args.loss_fn == "norm_softmax":
-        if device != "cpu":
-            opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
-                                                                    set(model.module.feature.parameters())),
-                                lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
-        else:
-            opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
-                                                                    set(model.feature.parameters())),
-                                lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
-    else:
-        opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
-                                                                set(model.feature.parameters())),
-                            lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)   
+    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
+                                                            set(model.module.feature.parameters())),
+                        lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
 
     # Lists to store max_f and max_b for pretraining and finetuning
     pretrain_losses, finetune_losses = [], []
@@ -173,10 +162,8 @@ def main(args):
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
 
-            if device != "cpu":
-                loss.mean().backward()
-            else:
-                loss.backward()
+            loss.backward()
+
             opt.step()
 
 
@@ -231,10 +218,8 @@ def main(args):
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
 
-            if device != "cpu":
-                loss.mean().backward()
-            else:
-                loss.backward()
+            loss.backward()
+
             opt.step()
 
 
