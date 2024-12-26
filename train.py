@@ -185,7 +185,7 @@ def main(args):
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
             model.train()
 
     print("="*80)
@@ -238,7 +238,7 @@ def main(args):
         if (epoch + 1) % args.test_every_n_epochs == 0:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
             model.train()
     print("="*80)
     print("Finetuning finished")
