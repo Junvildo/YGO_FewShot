@@ -41,14 +41,6 @@ import arcface
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-def adjust_learning_rate(optimizer, epoch, epochs_per_step, gamma=0.1):
-    """Sets the learning rate to the initial LR decayed by 10 every epochs"""
-    # Skip gamma update on first epoch.
-    if epoch != 0 and epoch % epochs_per_step == 0:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] *= gamma
-            print("learning rate adjusted: {}".format(param_group['lr']))
-
 
 def main(args):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -128,22 +120,23 @@ def main(args):
                             num_workers=4)
 
     # Setup loss function
-    if args.loss_fn == "norm_softmax":
-        loss_fn = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
-    else:
-        loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=30, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
+    nsm_loss = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
+    arcface_loss = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=30, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
 
     # model = torch.nn.DataParallel(model)
     model.to(device=device)
 
-    loss_fn.to(device=device)
+    nsm_loss.to(device=device)
+    arcface_loss.to(device=device)
 
     # Training mode
     model.train()
-    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
-                                                            set(model.feature.parameters())),
-                        lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
+    opt_nsm = torch.optim.AdamW(nsm_loss.parameters(), lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
+    opt_arcface = torch.optim.AdamW(arcface_loss.parameters(), lr=args.lr * args.lr_mult * 10, betas=(0.9, 0.999), weight_decay=1e-4)
+    # opt = torch.optim.AdamW(list(set(model.parameters()) -
+    #                                     set(model.feature.parameters())),
+    #                              lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
 
     # Lists to store max_f and max_b for pretraining and finetuning
     pretrain_losses, finetune_losses = [], []
@@ -155,21 +148,26 @@ def main(args):
         begin = time.time()
         epoch_loss = 0.0
         for i, (im, instance_label, _) in enumerate(train_loader):
-            opt.zero_grad()
+            opt_arcface.zero_grad()
+            opt_nsm.zero_grad()
+            # opt.zero_grad()
 
-            im, instance_label = cutmix_or_mixup(im, instance_label)
+            im, instance_label2 = cutmix_or_mixup(im, instance_label)
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
+            instance_label2 = instance_label2.to(device=device, non_blocking=True)
 
             embedding = model(im)
-            loss = loss_fn(embedding, instance_label)
+            loss = nsm_loss(embedding, instance_label2) + arcface_loss(embedding, instance_label)
 
             loss.backward()
 
-            opt.step()
+            # opt.step()
+            opt_arcface.step()
+            opt_nsm.step()
 
 
-            epoch_loss += loss.mean().item()
+            epoch_loss += loss.item()
             if (i + 1) % log_every_n_step == 0:
                 log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
         
@@ -194,33 +192,38 @@ def main(args):
     # Full end-to-end finetune of all parameters
     model.train()
 
-    opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
+    opt_nsm = torch.optim.AdamW(nsm_loss.parameters(), lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
+    opt_arcface = torch.optim.AdamW(arcface_loss.parameters(), lr=args.lr * args.lr_mult * 10, betas=(0.9, 0.999), weight_decay=1e-4)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
     print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
     print("="*80)
     for epoch in range(args.epochs_per_step * args.num_steps):
         begin = time.time()
         log_and_print(f'Output Directory: {output_directory}', log_file)
-        adjust_learning_rate(opt, epoch, args.epochs_per_step, gamma=args.gamma)
         
         epoch_loss = 0.0
         for i, (im, instance_label, _) in enumerate(train_loader):
 
             opt.zero_grad()
+            opt_arcface.zero_grad()
+            opt_nsm.zero_grad()
 
-            im, instance_label = cutmix_or_mixup(im, instance_label)
-
+            im, instance_label2 = cutmix_or_mixup(im, instance_label)
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
+            instance_label2 = instance_label2.to(device=device, non_blocking=True)
 
             embedding = model(im)
-            loss = loss_fn(embedding, instance_label)
+            loss = nsm_loss(embedding, instance_label2) + arcface_loss(embedding, instance_label)
 
             loss.backward()
 
             opt.step()
+            opt_arcface.step()
+            opt_nsm.step()
 
 
-            epoch_loss += loss.mean().item()
+            epoch_loss += loss.item()
             if (i + 1) % log_every_n_step == 0:
                 log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
 
@@ -260,16 +263,16 @@ if __name__ == '__main__':
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--loss_fn", type=str, default="norm_softmax", help="Loss function (norm_softmax, arcface)")
     parser.add_argument("--loss_variant", type=int, default=1, help="ArcFace loss variant (1, 2, 3)")
-    parser.add_argument("--lr", type=float, default=0.001, help="The base lr")
+    parser.add_argument("--lr", type=float, default=0.01, help="The base lr")
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
-    parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
+    parser.add_argument("--images_per_class", type=int, default=4, help="Images per class")
     parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
-    parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
-    parser.add_argument("--epochs_per_step", type=int, default=2, help="Epochs for learning rate step")
+    parser.add_argument("--test_every_n_epochs", type=int, default=1, help="Tests every N epochs")
+    parser.add_argument("--epochs_per_step", type=int, default=1, help="Epochs for learning rate step")
     parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
-    parser.add_argument("--num_steps", type=int, default=2, help="Num steps to take")
+    parser.add_argument("--num_steps", type=int, default=1, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
     parser.add_argument("--temperature", type=float, default=0.05, help="Temperature for norm softmax loss")
