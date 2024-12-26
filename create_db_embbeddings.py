@@ -2,6 +2,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='create db embeddings')
 parser.add_argument('--model_path', type=str, required=True, help='path to model checkpoint')
+parser.add_argument('--use_gem', action='store_true', default=False, help='whether to use GeM')
 parser.add_argument('--is_train', action='store_true', help='whether to use the training set to create db embeddings')
 parser.add_argument('--image_dir', type=str, required=True, help='path to image directory')
 parser.add_argument('--batch_size', type=int, default=32, help='batch size for data loader')
@@ -15,7 +16,7 @@ import faiss
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from models import EmbeddedFeatureWrapper
+from models import EmbeddedFeatureWrapper, GeM
 from mobileone import mobileone, reparameterize_model
 from data import CustomDataset
 from extract_features import extract_feature
@@ -24,6 +25,8 @@ from extract_features import extract_feature
 # Model setup
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
+if args.use_gem:
+    model.feature.gap = GeM()
 state_dict = torch.load(args.model_path, map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 model.load_state_dict(state_dict)
@@ -32,7 +35,7 @@ model.eval()
 model_eval = reparameterize_model(model)
 
 # Transform setup
-mean, std = [0.39111483097076416, 0.38889095187187195, 0.38865992426872253], [0.30603259801864624, 0.306450754404068, 0.30432021617889404]
+mean, std = [0.49362021684646606, 0.4601792097091675, 0.4618436098098755], [0.27437326312065125, 0.2629182040691376, 0.270280659198761]
 trans = transforms.Compose([
     transforms.Resize((args.image_size, args.image_size)),
     transforms.ToTensor(),
