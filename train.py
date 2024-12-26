@@ -169,7 +169,7 @@ def main(args):
 
             epoch_loss += loss.item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
+                log_and_print(f'Epoch {epoch}\n LR ArcFace {opt_arcface.param_groups[0]["lr"]}\n LR NSM {opt_nsm.param_groups[0]["lr"]}\n Iteration {i} / {len(train_loader)} loss:\t{2 * loss.mean().item()}', log_file)
         
         average_loss = epoch_loss / max(1, len(train_loader))
         pretrain_losses.append(average_loss)
@@ -225,7 +225,7 @@ def main(args):
 
             epoch_loss += loss.item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
+                log_and_print(f'Epoch {epoch}\n LR model: {opt.param_groups[0]["lr"]}\n LR ArcFace: {opt_arcface.param_groups[0]["lr"]}\n LR NSM: {opt_nsm.param_groups[0]["lr"]}\n Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
 
         average_loss = epoch_loss / max(1, len(train_loader))
         finetune_losses.append(average_loss)
@@ -255,7 +255,7 @@ def main(args):
 if __name__ == '__main__':
     parser = ArgumentParser(description="PyTorch metric learning training script")
     # Optional arguments for the launch helper
-    parser.add_argument("--dataset_root", type=str, default="./main_dataset",
+    parser.add_argument("--dataset_root", type=str, default="./dataset",
                         help="The root directory to the dataset")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
     parser.add_argument("--log_per_n_steps", type=int, default=100, help="Log every N steps")
