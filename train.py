@@ -22,7 +22,7 @@ import torch
 import os
 from util import log_and_print, plot_metrics, calculate_mean_std
 from mobileone import mobileone
-from models import EmbeddedFeatureWrapper
+from models import EmbeddedFeatureWrapper, GeM
 from torchvision import transforms
 from torchvision.transforms import v2
 from torch.utils.data import DataLoader
@@ -68,6 +68,8 @@ def main(args):
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=True)
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
+    if args.use_gem:
+        model.feature.gap = GeM()
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
@@ -270,6 +272,7 @@ if __name__ == '__main__':
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
     parser.add_argument("--temperature", type=float, default=0.05, help="Temperature for norm softmax loss")
+    parser.add_argument("--use_gem", default=False, action='store_true', help="Use GeM pooling")
 
     # Reduce randomness
     random.seed(42)
