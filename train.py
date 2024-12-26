@@ -73,15 +73,16 @@ def main(args):
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        # Resize and Normalize
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
-        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),  # Adjust color and brightness
-        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.2),  # Simulate blur
-        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),  # Random perspective shifts
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
-        transforms.ToTensor(),  # Convert to Tensor
-        transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2),  # Block parts of the image
+        transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.3, 2.0), hue=.01, saturation=(0.5, 2.0)),
+        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.5),
+        transforms.RandomAffine((1, 359), translate=(0, 0.3), scale=(1, 1.8), shear=(0.0, 0.8), fill=0),
+        transforms.RandomPerspective(),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomGrayscale(p=0.2),
+        transforms.ToTensor(),
+        transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2, value=1),
     ])
     eval_transform = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
