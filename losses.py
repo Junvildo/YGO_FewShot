@@ -26,6 +26,5 @@ class NormSoftmaxLoss(nn.Module):
         norm_weight = nn.functional.normalize(self.weight, dim=1)
 
         prediction_logits = nn.functional.linear(embeddings, norm_weight)
-
         loss = self.loss_fn(prediction_logits / self.temperature, instance_targets)
         return loss

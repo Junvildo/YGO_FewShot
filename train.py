@@ -24,6 +24,7 @@ from util import log_and_print, plot_metrics, calculate_mean_std
 from mobileone import mobileone
 from models import EmbeddedFeatureWrapper
 from torchvision import transforms
+from torchvision.transforms import v2
 from torch.utils.data import DataLoader
 from sampler import ClassBalancedBatchSampler
 from data import CustomDataset
@@ -48,6 +49,7 @@ def adjust_learning_rate(optimizer, epoch, epochs_per_step, gamma=0.1):
             param_group['lr'] *= gamma
             print("learning rate adjusted: {}".format(param_group['lr']))
 
+
 def main(args):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -67,24 +69,24 @@ def main(args):
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
 
-
-
-
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),
-        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),
+        # Resize and Normalize
+        transforms.RandomResizedCrop((args.img_size, args.img_size)),
+        transforms.ColorJitter(brightness=(0.5,1.5),contrast=(0.3,2.0),hue=.05, saturation=(.0,.15)),  # Adjust color and brightness
+        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.2),  # Simulate blur
+        transforms.RandomAffine(0, translate=(0,0.3), scale=(0.6,1.8), shear=(0.0,0.4), fill=0),  # Random perspective shifts
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
-        transforms.ToTensor(),
+        transforms.ToTensor(),  # Convert to Tensor
+        transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2),  # Block parts of the image
     ])
     eval_transform = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ToTensor(),
     ])
 
-    mean, std = calculate_mean_std(os.path.join(args.dataset_root, "train"), train_transform, device)
+    mean, std = calculate_mean_std(dataset_path=os.path.join(args.dataset_root, "train"), transform=transforms.Compose([transforms.Resize((args.img_size, args.img_size)), transforms.ToTensor()]), device=device)
     log_and_print("mean, std = {mean}, {std}".format(mean=mean, std=std), log_file)
     train_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
     eval_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
@@ -92,6 +94,12 @@ def main(args):
     # Setup dataset
     train_dataset = CustomDataset(root=args.dataset_root, train=True, transform=train_transform)
     eval_dataset = CustomDataset(root=args.dataset_root, train=False, transform=eval_transform)
+
+    NUM_CLASSES = train_dataset.num_instance
+
+    cutmix = v2.CutMix(num_classes=NUM_CLASSES)
+    mixup = v2.MixUp(num_classes=NUM_CLASSES)
+    cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
 
     # Setup dataset loader
     if args.class_balancing:
@@ -117,33 +125,24 @@ def main(args):
                             num_workers=4)
 
     # Setup loss function
-    if args.loss_fn == "normsoftmax":
+    if args.loss_fn == "norm_softmax":
         loss_fn = losses.NormSoftmaxLoss(dim=args.dim, num_instances=train_dataset.num_instance, temperature=args.temperature)
-        loss_fn = torch.nn.DataParallel(loss_fn)
-        model = torch.nn.DataParallel(model)
     else:
         loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=30, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
+
+    # model = torch.nn.DataParallel(model)
     model.to(device=device)
 
     loss_fn.to(device=device)
 
     # Training mode
     model.train()
-    if args.loss_fn == "normsoftmax":
-        opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.module.parameters()) -
-                                                                set(model.module.feature.parameters())),
-                            lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
-    else:
-        opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
-                                                                set(model.feature.parameters())),
-                            lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)   
+    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
+                                                            set(model.feature.parameters())),
+                        lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
 
     # Lists to store max_f and max_b for pretraining and finetuning
-    pretrain_max_r_f, pretrain_max_r_b = [], []
-    pretrain_max_p_f, pretrain_max_p_b = [], []
-    finetune_max_r_f, finetune_max_r_b = [], []
-    finetune_max_p_f, finetune_max_p_b = [], []
     pretrain_losses, finetune_losses = [], []
 
     log_every_n_step = args.log_per_n_steps
@@ -155,15 +154,15 @@ def main(args):
         for i, (im, instance_label, _) in enumerate(train_loader):
             opt.zero_grad()
 
+            im, instance_label = cutmix_or_mixup(im, instance_label)
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
 
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
-            if args.loss_fn == "normsoftmax":
-                loss.mean().backward()
-            else:
-                loss.backward()
+
+            loss.backward()
+
             opt.step()
 
 
@@ -183,24 +182,16 @@ def main(args):
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
             model.train()
-
-            # Store max_f and max_b
-            pretrain_max_r_f.append(max_r_f)
-            pretrain_max_r_b.append(max_r_b)
-            pretrain_max_p_f.append(max_p_f)
-            pretrain_max_p_b.append(max_p_b)
 
     print("="*80)
     print("Pretraining finished")
 
     # Full end-to-end finetune of all parameters
     model.train()
-    if args.loss_fn == "normsoftmax":
-        opt = torch.optim.AdamW(chain(model.module.parameters(), loss_fn.module.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
-    else:
-        opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
+
+    opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
     print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
     print("="*80)
     for epoch in range(args.epochs_per_step * args.num_steps):
@@ -213,16 +204,16 @@ def main(args):
 
             opt.zero_grad()
 
+            im, instance_label = cutmix_or_mixup(im, instance_label)
+
             im = im.to(device=device, non_blocking=True)
             instance_label = instance_label.to(device=device, non_blocking=True)
 
             embedding = model(im)
             loss = loss_fn(embedding, instance_label)
 
-            if args.loss_fn == "normsoftmax":
-                loss.mean().backward()
-            else:
-                loss.backward()
+            loss.backward()
+
             opt.step()
 
 
@@ -244,28 +235,14 @@ def main(args):
         if (epoch + 1) % args.test_every_n_epochs == 0:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
             embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            max_r_f, max_r_b, max_p_f, max_p_b = evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
+            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=1000)
             model.train()
-
-            # Store max_f and max_b
-            finetune_max_r_f.append(max_r_f)
-            finetune_max_r_b.append(max_r_b)
-            finetune_max_p_f.append(max_p_f)
-            finetune_max_p_b.append(max_p_b)
     print("="*80)
     print("Finetuning finished")
     log_file.close()
 
     # Save plots
-    plot_metrics(pretrain_max_r_f, "Max Recall F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_r_f.png"))
-    plot_metrics(pretrain_max_r_b, "Max Racall B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_r_b.png"))
-    plot_metrics(pretrain_max_p_f, "Max Precision F over Pretraining Epochs", "Max F", os.path.join(output_directory, "pretrain_max_p_f.png"))
-    plot_metrics(pretrain_max_p_b, "Max Precision B over Pretraining Epochs", "Max B", os.path.join(output_directory, "pretrain_max_p_b.png"))
     plot_metrics(pretrain_losses, "Loss over Pretraining Epochs", "Loss", os.path.join(output_directory, "pretrain_loss.png"))
-    plot_metrics(finetune_max_r_f, "Max Recall F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_r_f.png"))
-    plot_metrics(finetune_max_r_b, "Max Recall B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_r_b.png"))
-    plot_metrics(finetune_max_p_f, "Max Precision F over Finetuning Epochs", "Max F", os.path.join(output_directory, "finetune_max_p_f.png"))
-    plot_metrics(finetune_max_p_b, "Max Precision B over Finetuning Epochs", "Max B", os.path.join(output_directory, "finetune_max_p_b.png"))
     plot_metrics(finetune_losses, "Loss over Finetuning Epochs", "Loss", os.path.join(output_directory, "finetune_loss.png"))
 
 
@@ -292,7 +269,7 @@ if __name__ == '__main__':
     parser.add_argument("--num_steps", type=int, default=2, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
-    parser.add_argument("--temperature", type=float, default=0.1, help="Temperature for norm softmax loss")
+    parser.add_argument("--temperature", type=float, default=0.05, help="Temperature for norm softmax loss")
 
     # Reduce randomness
     random.seed(42)
