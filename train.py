@@ -37,17 +37,19 @@ from itertools import chain
 import random
 import numpy as np
 import arcface
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-def adjust_learning_rate(optimizer, epoch, epochs_per_step, gamma=0.1):
-    """Sets the learning rate to the initial LR decayed by 10 every epochs"""
-    # Skip gamma update on first epoch.
-    if epoch != 0 and epoch % epochs_per_step == 0:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] *= gamma
-            print("learning rate adjusted: {}".format(param_group['lr']))
+# def adjust_learning_rate(optimizer, epoch, epochs, gamma=0.1):
+#     """Sets the learning rate to the initial LR decayed by 10 every epochs"""
+#     # Skip gamma update on first epoch.
+#     if epoch != 0 and epoch % epochs == 0:
+#         for param_group in optimizer.param_groups:
+#             param_group['lr'] *= gamma
+#             print("learning rate adjusted: {}".format(param_group['lr']))
 
 
 def main(args):
@@ -71,6 +73,7 @@ def main(args):
     if args.use_gem:
         model.feature.gap = GeM()
 
+    progressive_res = [56, 112, 224]
     # Setup train and eval transformations
     train_transform = transforms.Compose([
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
@@ -143,7 +146,8 @@ def main(args):
     model.train()
     opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
                                                             set(model.feature.parameters())),
-                        lr=args.lr * args.lr_mult, betas=(0.9, 0.999), weight_decay=1e-4)
+                        lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
+
 
     # Lists to store max_f and max_b for pretraining and finetuning
     pretrain_losses, finetune_losses = [], []
@@ -169,9 +173,9 @@ def main(args):
             opt.step()
 
 
-            epoch_loss += loss.mean().item()
+            epoch_loss += loss.item()
             if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
+                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.item()}', log_file)
         
         average_loss = epoch_loss / max(1, len(train_loader))
         pretrain_losses.append(average_loss)
@@ -195,51 +199,100 @@ def main(args):
     model.train()
 
     opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
-    print("Start finetuning for {} epochs".format(args.epochs_per_step * args.num_steps))
+    if args.progressive_training:
+        scheduler = CosineAnnealingLR(opt, args.epochs * len(progressive_res))
+    else:
+        scheduler = CosineAnnealingLR(opt, args.epochs)
+    print("Start finetuning for {} epochs".format(args.epochs))
     print("="*80)
-    for epoch in range(args.epochs_per_step * args.num_steps):
-        begin = time.time()
-        log_and_print(f'Output Directory: {output_directory}', log_file)
-        adjust_learning_rate(opt, epoch, args.epochs_per_step, gamma=args.gamma)
+    if args.progressive_training:
+        for epoch in range(args.epochs * len(progressive_res)):
+            begin = time.time()
+            log_and_print(f'Output Directory: {output_directory}', log_file)
+            r = progressive_res[min(epoch // max(1, args.epochs // len(progressive_res)), len(progressive_res) - 1)]
+            print(f"Finetuning resolution: {r}x{r}")
+
+            # Create a new Compose object with the updated RandomResizedCrop
+            updated_train_transform = transforms.Compose([
+                transforms.RandomResizedCrop((r, r)),  # Update the resolution
+                *train_transform.transforms[1:]  # Keep the rest of the transformations
+            ])
+            updated_eval_transform = transforms.Compose([
+                transforms.Resize((r, r)),  # Update the resolution
+                *eval_transform.transforms[1:]  # Keep the rest of the transformations
+            ])
+            
+            # Update the dataset with the new transform
+            train_dataset.transform = updated_train_transform
+            eval_dataset.transform = updated_eval_transform
         
-        epoch_loss = 0.0
-        for i, (im, instance_label, _) in enumerate(train_loader):
+            epoch_loss = 0.0
+            for i, (im, instance_label, _) in enumerate(train_loader):
 
-            opt.zero_grad()
+                opt.zero_grad()
 
-            im, instance_label = cutmix_or_mixup(im, instance_label)
+                im, instance_label = cutmix_or_mixup(im, instance_label)
 
-            im = im.to(device=device, non_blocking=True)
-            instance_label = instance_label.to(device=device, non_blocking=True)
+                im = im.to(device=device, non_blocking=True)
+                instance_label = instance_label.to(device=device, non_blocking=True)
 
-            embedding = model(im)
-            loss = loss_fn(embedding, instance_label)
+                embedding = model(im)
+                loss = loss_fn(embedding, instance_label)
 
-            loss.backward()
+                loss.backward()
 
-            opt.step()
+                opt.step()
+
+                epoch_loss += loss.item()
+                if (i + 1) % log_every_n_step == 0:
+                    log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.item()}', log_file)
+            scheduler.step()
+            average_loss = epoch_loss / max(1, len(train_loader))
+            finetune_losses.append(average_loss)
+            log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
+    else:
+        for epoch in range(args.normal_epochs):
+            begin = time.time()
+            log_and_print(f'Output Directory: {output_directory}', log_file)
+            
+            epoch_loss = 0.0
+            for i, (im, instance_label, _) in enumerate(train_loader):
+
+                opt.zero_grad()
+
+                im, instance_label = cutmix_or_mixup(im, instance_label)
+
+                im = im.to(device=device, non_blocking=True)
+                instance_label = instance_label.to(device=device, non_blocking=True)
+
+                embedding = model(im)
+                loss = loss_fn(embedding, instance_label)
+
+                loss.backward()
+
+                opt.step()
 
 
-            epoch_loss += loss.mean().item()
-            if (i + 1) % log_every_n_step == 0:
-                log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.mean().item()}', log_file)
+                epoch_loss += loss.item()
+                if (i + 1) % log_every_n_step == 0:
+                    log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.item()}', log_file)
+            scheduler.step()
+            average_loss = epoch_loss / max(1, len(train_loader))
+            finetune_losses.append(average_loss)
+            log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
 
-        average_loss = epoch_loss / max(1, len(train_loader))
-        finetune_losses.append(average_loss)
-        log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
+            finish = time.time()
+            remaining_epochs = (args.epochs) - epoch - 1
+            estimate_finish_time = round((finish - begin) * remaining_epochs, 5)
+            log_and_print(f'Finetune: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
+            snapshot_path = os.path.join(output_directory, 'epoch_{}.pth'.format(epoch + 1))
+            torch.save(model.state_dict(), snapshot_path)
 
-        finish = time.time()
-        remaining_epochs = (args.epochs_per_step * args.num_steps) - epoch - 1
-        estimate_finish_time = round((finish - begin) * remaining_epochs, 5)
-        log_and_print(f'Finetune: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
-        snapshot_path = os.path.join(output_directory, 'epoch_{}.pth'.format(epoch + 1))
-        torch.save(model.state_dict(), snapshot_path)
-
-        if (epoch + 1) % args.test_every_n_epochs == 0:
-            eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
-            embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
-            model.train()
+            if (epoch + 1) % args.test_every_n_epochs == 0:
+                eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
+                embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
+                evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
+                model.train()
     print("="*80)
     print("Finetuning finished")
     log_file.close()
@@ -255,8 +308,8 @@ if __name__ == '__main__':
     parser.add_argument("--dataset_root", type=str, default="./main_dataset",
                         help="The root directory to the dataset")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
-    parser.add_argument("--log_per_n_steps", type=int, default=100, help="Log every N steps")
-    parser.add_argument("--img_size", type=int, default=56, help="Image size for training")
+    parser.add_argument("--log_per_n_steps", type=int, default=20, help="Log every N steps")
+    parser.add_argument("--img_size", type=int, default=7, help="Image size for training")
     parser.add_argument("--model_variant", type=str, default="s2", help="MobileOne variant (s0, s1, s2, s3, s4)")
     parser.add_argument("--loss_fn", type=str, default="norm_softmax", help="Loss function (norm_softmax, arcface)")
     parser.add_argument("--loss_variant", type=int, default=1, help="ArcFace loss variant (1, 2, 3)")
@@ -264,16 +317,16 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
-    parser.add_argument("--lr_mult", type=float, default=1, help="lr_mult for new params")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
     parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
-    parser.add_argument("--epochs_per_step", type=int, default=2, help="Epochs for learning rate step")
+    parser.add_argument("--epochs", type=int, default=2, help="Epochs for each finetuning res: Total epochs = epochs * number of res")
+    parser.add_argument("--normal_epochs", type=int, default=30, help="Epochs for normal finetuning")
     parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
-    parser.add_argument("--num_steps", type=int, default=2, help="Num steps to take")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
     parser.add_argument("--temperature", type=float, default=0.05, help="Temperature for norm softmax loss")
     parser.add_argument("--use_gem", default=False, action='store_true', help="Use GeM pooling")
+    parser.add_argument("--progressive_training", default=False, action='store_true', help="Use progressive training")
 
     # Reduce randomness
     random.seed(42)
