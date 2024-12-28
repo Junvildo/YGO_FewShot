@@ -73,7 +73,8 @@ def main(args):
     if args.use_gem:
         model.feature.gap = GeM()
 
-    progressive_res = [56, 112, 224]
+    if args.progressive_training:
+        progressive_res = [56, 112, 224]
     # Setup train and eval transformations
     train_transform = transforms.Compose([
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
@@ -137,7 +138,6 @@ def main(args):
         loss_fn = arcface.ArcFace(embed_size=args.dim, num_classes=train_dataset.num_instance, scale=30, margin=0.5, easy_margin=False, variant=args.loss_variant, device=device)
 
 
-    # model = torch.nn.DataParallel(model)
     model.to(device=device)
 
     loss_fn.to(device=device)
@@ -206,10 +206,9 @@ def main(args):
     print("Start finetuning for {} epochs".format(args.epochs))
     print("="*80)
     if args.progressive_training:
-        for epoch in range(args.epochs * len(progressive_res)):
-            begin = time.time()
+        for i in range(len(progressive_res)):
             log_and_print(f'Output Directory: {output_directory}', log_file)
-            r = progressive_res[min(epoch // max(1, args.epochs // len(progressive_res)), len(progressive_res) - 1)]
+            r = progressive_res[i]
             print(f"Finetuning resolution: {r}x{r}")
 
             # Create a new Compose object with the updated RandomResizedCrop
@@ -225,33 +224,36 @@ def main(args):
             # Update the dataset with the new transform
             train_dataset.transform = updated_train_transform
             eval_dataset.transform = updated_eval_transform
-        
-            epoch_loss = 0.0
-            for i, (im, instance_label, _) in enumerate(train_loader):
+            
+            for epoch in range(args.epochs):
+                begin = time.time()
+            
+                epoch_loss = 0.0
+                for i, (im, instance_label, _) in enumerate(train_loader):
 
-                opt.zero_grad()
+                    opt.zero_grad()
 
-                im, instance_label = cutmix_or_mixup(im, instance_label)
+                    im, instance_label = cutmix_or_mixup(im, instance_label)
 
-                im = im.to(device=device, non_blocking=True)
-                instance_label = instance_label.to(device=device, non_blocking=True)
+                    im = im.to(device=device, non_blocking=True)
+                    instance_label = instance_label.to(device=device, non_blocking=True)
 
-                embedding = model(im)
-                loss = loss_fn(embedding, instance_label)
+                    embedding = model(im)
+                    loss = loss_fn(embedding, instance_label)
 
-                loss.backward()
+                    loss.backward()
 
-                opt.step()
+                    opt.step()
 
-                epoch_loss += loss.item()
-                if (i + 1) % log_every_n_step == 0:
-                    log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.item()}', log_file)
-            scheduler.step()
-            average_loss = epoch_loss / max(1, len(train_loader))
-            finetune_losses.append(average_loss)
-            log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
+                    epoch_loss += loss.item()
+                    if (i + 1) % log_every_n_step == 0:
+                        log_and_print(f'Epoch {epoch}, LR {opt.param_groups[0]["lr"]}, Iteration {i} / {len(train_loader)} loss:\t{loss.item()}', log_file)
+                scheduler.step()
+                average_loss = epoch_loss / max(1, len(train_loader))
+                finetune_losses.append(average_loss)
+                log_and_print(f'Epoch {epoch} average loss: {average_loss}', log_file)
     else:
-        for epoch in range(args.normal_epochs):
+        for epoch in range(args.epochs):
             begin = time.time()
             log_and_print(f'Output Directory: {output_directory}', log_file)
             
@@ -314,13 +316,11 @@ if __name__ == '__main__':
     parser.add_argument("--loss_fn", type=str, default="norm_softmax", help="Loss function (norm_softmax, arcface)")
     parser.add_argument("--loss_variant", type=int, default=1, help="ArcFace loss variant (1, 2, 3)")
     parser.add_argument("--lr", type=float, default=0.001, help="The base lr")
-    parser.add_argument("--gamma", type=float, default=0.1, help="Gamma applied to learning rate")
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
     parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
-    parser.add_argument("--epochs", type=int, default=2, help="Epochs for each finetuning res: Total epochs = epochs * number of res")
-    parser.add_argument("--normal_epochs", type=int, default=30, help="Epochs for normal finetuning")
+    parser.add_argument("--epochs", type=int, default=1, help="Epochs for each finetuning res: Total epochs = epochs * number of res")
     parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
     parser.add_argument("--pretrain_path", type=str, default="", help="Pretrain mobileone path, end with .tar")
