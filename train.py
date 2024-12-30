@@ -38,7 +38,7 @@ import random
 import numpy as np
 import arcface
 from torch.optim.lr_scheduler import CosineAnnealingLR
-
+import antialiased_cnns
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -70,11 +70,18 @@ def main(args):
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=True)
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
+    if args.model_variant == "s0":
+        C = 512 * 2
+    elif args.model_variant == "s1":
+        C = int(512 * 2.5)
+    else:
+        C = 512 * 4
     if args.use_gem:
-        model.feature.gap = GeM()
+        model.feature.gap = torch.nn.Sequential(antialiased_cnns.BlurPool(C, stride=2, filt_size=1), GeM())
 
     if args.progressive_training:
         progressive_res = [56, 112, 224]
+
     # Setup train and eval transformations
     train_transform = transforms.Compose([
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
