@@ -38,7 +38,6 @@ import random
 import numpy as np
 import arcface
 from torch.optim.lr_scheduler import CosineAnnealingLR
-import antialiased_cnns
 from lion_pytorch import Lion
 
 
@@ -71,14 +70,9 @@ def main(args):
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=True)
         baseline.load_state_dict(checkpoint)
     model = EmbeddedFeatureWrapper(feature=baseline, input_dim=2048, output_dim=args.dim)
-    if args.model_variant == "s0":
-        C = 512 * 2
-    elif args.model_variant == "s1":
-        C = int(512 * 2.5)
-    else:
-        C = 512 * 4
+
     if args.use_gem:
-        model.feature.gap = torch.nn.Sequential(antialiased_cnns.BlurPool(C, stride=2, filt_size=1), GeM())
+        model.feature.gap = GeM()
 
     if args.progressive_training:
         progressive_res = [56, 112, 224]
@@ -152,13 +146,13 @@ def main(args):
 
     # Training mode
     model.train()
-    # opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
-    #                                                         set(model.feature.parameters())),
-    #                     lr=args.lr, betas=(0.9, 0.99), weight_decay=1e-4)
-
-    opt = Lion(list(loss_fn.parameters()) + list(set(model.parameters()) -
+    opt = torch.optim.AdamW(list(loss_fn.parameters()) + list(set(model.parameters()) -
                                                             set(model.feature.parameters())),
-                        lr=args.lr/3, betas=(0.9, 0.99), weight_decay=1e-2)
+                        lr=args.lr, betas=(0.9, 0.99), weight_decay=1e-4)
+
+    # opt = Lion(list(loss_fn.parameters()) + list(set(model.parameters()) -
+    #                                                         set(model.feature.parameters())),
+    #                     lr=args.lr/3, betas=(0.9, 0.99), weight_decay=1e-2)
 
     # Lists to store max_f and max_b for pretraining and finetuning
     pretrain_losses, finetune_losses = [], []
@@ -209,12 +203,12 @@ def main(args):
     # Full end-to-end finetune of all parameters
     model.train()
 
-    # opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
-    opt = Lion(chain(model.parameters(), loss_fn.parameters()), lr=args.lr/3, betas=(0.9, 0.99), weight_decay=1e-2)
+    opt = torch.optim.AdamW(chain(model.parameters(), loss_fn.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
+    # opt = Lion(chain(model.parameters(), loss_fn.parameters()), lr=args.lr/3, betas=(0.9, 0.99), weight_decay=1e-2)
     if args.progressive_training:
-        scheduler = CosineAnnealingLR(opt, args.epochs * len(progressive_res), eta_min=args.lr/30)
+        scheduler = CosineAnnealingLR(opt, args.epochs * len(progressive_res), eta_min=args.lr)
     else:
-        scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/30)
+        scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr)
     if args.progressive_training:
         print("Start finetuning for {} epochs".format(args.epochs * len(progressive_res)))
     else:
