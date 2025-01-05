@@ -101,7 +101,7 @@ model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, 
 state_dict = torch.load("finetuned_models/s2_56_grayscale.pth", map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 model.load_state_dict(state_dict)
-mean, std = [0.39111483097076416, 0.38889095187187195, 0.38865992426872253], [0.30603259801864624, 0.306450754404068, 0.30432021617889404]
+mean, std = [0.49362021684646606, 0.4601792097091675, 0.4618436098098755], [0.27437326312065125, 0.2629182040691376, 0.270280659198761]
 trans = transforms.Compose([
     transforms.Resize((56, 56)),
     transforms.ToTensor(),
@@ -126,7 +126,7 @@ index = faiss.IndexFlatL2(2048)
 index = faiss.read_index(faiss_index_file)
 
 
-distances, indices = index.search(binary_query_embeddings, 4)
+distances, indices = index.search(binary_query_embeddings, 1)
 
 k_similar_images = [indice for indice in indices]
 
