@@ -9,7 +9,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from PIL import Image
 from data_preprocess import detect_and_correct_perspective, extract_artwork
-from models import EmbeddedFeatureWrapper
+from models import EmbeddedFeatureWrapper, GeM
 from mobileone import reparameterize_model, mobileone
 from data import InferenceDataset, CustomDataset
 import os
@@ -20,18 +20,19 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 yolo_model = YOLO('finetuned_models/yolo_ygo.pt')
 
 # Load FAISS index and base dataset for similarity search
-faiss_index_file = "class_embeddings.faiss"
+faiss_index_file = "precompute_embs/cutmixup/better_aug/full_class_embeddings_56.faiss"
 index = faiss.read_index(faiss_index_file)
 
 # Load the feature extraction model
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 feature_model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
-state_dict = torch.load("finetuned_models/s2_56_grayscale.pth", map_location=device, weights_only=True)
+feature_model.feature.gap = GeM()
+state_dict = torch.load("finetuned_models/s2_56_color_mixup_gem_aug_best.pth", map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 feature_model.load_state_dict(state_dict)
 
 # Define transformations for input images
-mean, std = [0.49362021684646606, 0.4601792097091675, 0.4618436098098755], [0.27437326312065125, 0.2629182040691376, 0.270280659198761]
+mean, std = [0.4935736358165741, 0.46013686060905457, 0.4618111848831177], [0.2947998642921448, 0.28370970487594604, 0.2891422510147095]
 trans = transforms.Compose([
     transforms.Resize((56, 56)),
     transforms.ToTensor(),
@@ -68,7 +69,7 @@ def get_model_outputs(numpy_arrays, model, batch_size, device, transform):
             outputs.append(batch_outputs.cpu())
     return torch.cat(outputs, dim=0)
 
-def process_input(input_data):
+def process_input(input_data, thresh_val):
     """
     Process input image or video using YOLO, perspective correction, and FAISS similarity search.
     Returns:
@@ -86,14 +87,18 @@ def process_input(input_data):
         if conf >= 0.5:  # Filter by confidence (greater than 50%)
             x1, y1, x2, y2 = map(int, box)  # Extract bounding box coordinates
             cards.append(input_data[round(y1-2):round(y2+2), round(x1-2):round(x2+2)])
+    print(f"Number of detected cards: {len(cards)}")
 
     # Preprocess cards (perspective correction and artwork extraction)
     preprocessed_cards = [detect_and_correct_perspective(card) for card in cards]
-    arts = [extract_artwork(card, thresh_val=180, img_size=56) for card in preprocessed_cards]
+    print(f"Number of preprocessed cards: {len(preprocessed_cards)}")
+    arts = [extract_artwork(card, thresh_val=thresh_val, img_size=56) for card in preprocessed_cards]
     arts = [art for art in arts if art is not None]  # Filter out None values
 
     # Get model outputs for extracted artworks
-    outputs = get_model_outputs(arts, feature_model, 8, device, trans)
+    batch_size = 8 if len(arts) > 8 else len(arts)
+    print(f"Batch size: {batch_size}")
+    outputs = get_model_outputs(arts, feature_model, batch_size, device, trans)
     outputs = outputs.detach().numpy()
     binary_query_embeddings = np.require(outputs > 0, dtype='float32')
 
@@ -128,10 +133,10 @@ def process_input(input_data):
     return annotated_frame, concatenated_cards, concatenated_arts, similar_image_urls
 
 # Gradio interface
-def gradio_interface(input_type, input_data):
+def gradio_interface(input_type, input_data, thresh_val):
     if input_type == "image":
         # Process image
-        annotated_frame, concatenated_cards, concatenated_arts, similar_image_urls = process_input(input_data)
+        annotated_frame, concatenated_cards, concatenated_arts, similar_image_urls = process_input(input_data, thresh_val)
         return annotated_frame, concatenated_cards, concatenated_arts, similar_image_urls
     elif input_type == "video":
         # Process video
@@ -144,7 +149,7 @@ def gradio_interface(input_type, input_data):
             frames.append(frame)
         cap.release()
         # Process each frame
-        annotated_frames = [process_input(frame)[0] if i % 30 == 0 else frame for i, frame in enumerate(frames)]
+        annotated_frames = [process_input(frame, thresh_val)[0] if i % 30 == 0 else frame for i, frame in enumerate(frames)]
         # Save annotated frames as a video
         output_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         out = cv2.VideoWriter(
@@ -163,13 +168,26 @@ def gradio_interface(input_type, input_data):
 # Gradio app
 with gr.Blocks() as demo:
     gr.Markdown("# YOLO Object Detection with Gradio")
+    
     with gr.Tab("Image"):
-        image_input = gr.Image(label="Upload Image")
-        image_output = gr.Image(label="Annotated Image")
-        concatenated_cards_output = gr.Image(label="Detected Cards")
-        concatenated_arts_output = gr.Image(label="Extracted Artworks")
+        # First row: Upload Image and Annotated Image
+        with gr.Row():
+            image_input = gr.Image(label="Upload Image")
+            image_output = gr.Image(label="Annotated Image")
+        
+        # Second row: Slider
+        with gr.Row():
+            thresh_val_slider = gr.Slider(minimum=0, maximum=255, value=180, label="Threshold Value for Artwork Extraction")
+        
+        # Third row: Detected Cards and Extracted Artworks
+        with gr.Row():
+            concatenated_cards_output = gr.Image(label="Detected Cards")
+            concatenated_arts_output = gr.Image(label="Extracted Artworks")
+        
+        # Similar Image URLs and Button
         similar_images_output = gr.Textbox(label="Similar Image URLs")
         image_button = gr.Button("Detect Objects in Image")
+    
     with gr.Tab("Video"):
         video_input = gr.Video(label="Upload Video")
         video_output = gr.Video(label="Annotated Video")
@@ -178,12 +196,12 @@ with gr.Blocks() as demo:
     # Define button actions
     image_button.click(
         fn=gradio_interface,
-        inputs=[gr.State("image"), image_input],
+        inputs=[gr.State("image"), image_input, thresh_val_slider],
         outputs=[image_output, concatenated_cards_output, concatenated_arts_output, similar_images_output],
     )
     video_button.click(
         fn=gradio_interface,
-        inputs=[gr.State("video"), video_input],
+        inputs=[gr.State("video"), video_input, thresh_val_slider],
         outputs=[video_output, concatenated_cards_output, concatenated_arts_output, similar_images_output],
     )
 
