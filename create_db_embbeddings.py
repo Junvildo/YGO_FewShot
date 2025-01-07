@@ -20,14 +20,13 @@ from models import EmbeddedFeatureWrapper, GeM
 from mobileone import mobileone, reparameterize_model
 from data import CustomDataset
 from extract_features import extract_feature
-import antialiased_cnns
 
 
 # Model setup
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = EmbeddedFeatureWrapper(feature=mobileone(variant="s2"), input_dim=2048, output_dim=2048)
 if args.use_gem:
-    model.feature.gap = torch.nn.Sequential(antialiased_cnns.BlurPool(2048, stride=2, filt_size=1), GeM())
+    model.feature.gap = GeM()
 state_dict = torch.load(args.model_path, map_location=device, weights_only=True)
 state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 model.load_state_dict(state_dict)
