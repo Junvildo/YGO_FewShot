@@ -14,6 +14,7 @@ failed_artworks/
 *.zip
 *.json
 dataset*/
+precompute*/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
