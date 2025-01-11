@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser.add_argument("--output", type=str, default="./eval_results",)
     args = parser.parse_args()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    base_transform = transforms.Compose([
+    eval_transform = transforms.Compose([
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.3, 2.0), hue=.01, saturation=(0.5, 2.0)),
         transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.5),
@@ -37,7 +37,7 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         transforms.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.3), p=0.2, value=1),
     ])
-    eval_transform = transforms.Compose([
+    base_transform = transforms.Compose([
         transforms.Resize((args.img_size, args.img_size)),
         transforms.ToTensor(),
     ])
