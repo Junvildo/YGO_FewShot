@@ -22,9 +22,10 @@ if __name__ == '__main__':
                         help="The number of workers for eval")
     parser.add_argument("--batch_size", type=int, default=32,
                         help="The number of workers for eval")
+    parser.add_argument("--output", type=str, default="./eval_results",)
     args = parser.parse_args()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    train_transform = transforms.Compose([
+    base_transform = transforms.Compose([
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.3, 2.0), hue=.01, saturation=(0.5, 2.0)),
         transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.5),
@@ -43,11 +44,11 @@ if __name__ == '__main__':
 
     mean, std = [0.4935736358165741, 0.46013686060905457, 0.4618111848831177], [0.2947998642921448, 0.28370970487594604, 0.2891422510147095]
 
-    train_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
+    base_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
     eval_transform.transforms.append(transforms.Normalize(mean=mean, std=std))
 
     
-    base_dataset = CustomDataset(root=args.dataset_root, train=True, transform=train_transform)
+    base_dataset = CustomDataset(root=args.dataset_root, train=True, transform=base_transform)
     eval_dataset = CustomDataset(root=args.dataset_root, train=True, transform=eval_transform)
 
     base_loader = DataLoader(base_dataset,
@@ -71,4 +72,4 @@ if __name__ == '__main__':
     model.load_state_dict(state_dict)
     db_embeddings, db_labels = extract_feature(loader=base_loader, model=model, device=device)
     query_embeddings, query_labels = extract_feature(loader=eval_loader, model=model, device=device)
-    evaluate_float_binary_embedding_faiss(query_embeddings=query_embeddings, query_labels=query_labels, db_embeddings=db_embeddings, db_labels=db_labels, output=args.snap, k=4)
+    evaluate_float_binary_embedding_faiss(query_embeddings=query_embeddings, query_labels=query_labels, db_embeddings=db_embeddings, db_labels=db_labels, output=args.output, k=10)
