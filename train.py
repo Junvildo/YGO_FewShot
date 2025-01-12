@@ -79,6 +79,7 @@ def main(args):
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
+        transforms.Resize((256, 256)),
         transforms.RandomResizedCrop((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.3, 2.0), hue=.01, saturation=(0.5, 2.0)),
         transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.5),
@@ -102,7 +103,9 @@ def main(args):
 
     # Setup dataset
     train_dataset = CustomDataset(root=args.dataset_root, train=True, transform=train_transform)
-    eval_dataset = CustomDataset(root=args.dataset_root, train=False, transform=eval_transform)
+    base_dataset = CustomDataset(root=args.dataset_root, train=True, transform=eval_transform)
+    eval_dataset = CustomDataset(root=args.dataset_root, train=False, transform=train_transform)
+
 
     NUM_CLASSES = train_dataset.num_instance
 
@@ -130,6 +133,13 @@ def main(args):
                             batch_size=args.batch_size,
                             drop_last=False,
                             shuffle=False,
+                            pin_memory=True,
+                            num_workers=4)
+    
+    base_loader = DataLoader(base_dataset,
+                            batch_size=args.batch_size,
+                            drop_last=False,
+                            shuffle=True,
                             pin_memory=True,
                             num_workers=4)
 
@@ -193,8 +203,9 @@ def main(args):
         log_and_print(f'Pretrain: Epoch {epoch} finished in {finish - begin} seconds, estimated finish time: {estimate_finish_time}s\n', log_file)
         if epoch == 0 or epoch == args.pretrain_epochs - 1:
             eval_file = os.path.join(output_directory, 'epoch_{}'.format(args.pretrain_epochs - epoch))
-            embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
+            db_embeddings, db_labels = extract_feature(model, base_loader, device, step=log_every_n_step)
+            query_embeddings, query_labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
+            evaluate_float_binary_embedding_faiss(query_embeddings=query_embeddings, query_labels=query_labels, db_embeddings=db_embeddings, db_labels=db_labels, output=eval_file, k=10)
             model.train()
 
     print("="*80)
@@ -270,8 +281,9 @@ def main(args):
                 torch.save(model.state_dict(), snapshot_path)
 
             eval_file = os.path.join(output_directory, 'res_{}_epoch_{}'.format(r, epoch + 1))
-            embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-            evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
+            db_embeddings, db_labels = extract_feature(model, base_loader, device, step=log_every_n_step)
+            query_embeddings, query_labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
+            evaluate_float_binary_embedding_faiss(query_embeddings=query_embeddings, query_labels=query_labels, db_embeddings=db_embeddings, db_labels=db_labels, output=eval_file, k=10)
             model.train()
     else:
         for epoch in range(args.epochs):
@@ -313,8 +325,9 @@ def main(args):
 
             if (epoch + 1) % args.test_every_n_epochs == 0:
                 eval_file = os.path.join(output_directory, 'epoch_{}'.format(epoch + 1))
-                embeddings, labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
-                evaluate_float_binary_embedding_faiss(embeddings, embeddings, labels, labels, eval_file, k=4)
+                db_embeddings, db_labels = extract_feature(model, base_loader, device, step=log_every_n_step)
+                query_embeddings, query_labels = extract_feature(model, eval_loader, device, step=log_every_n_step)
+                evaluate_float_binary_embedding_faiss(query_embeddings=query_embeddings, query_labels=query_labels, db_embeddings=db_embeddings, db_labels=db_labels, output=eval_file, k=10)
                 model.train()
     print("="*80)
     print("Finetuning finished")
@@ -340,7 +353,7 @@ if __name__ == '__main__':
     parser.add_argument("--class_balancing", default=True, action='store_true', help="Use class balancing")
     parser.add_argument("--images_per_class", type=int, default=5, help="Images per class")
     parser.add_argument("--dim", type=int, default=2048, help="The dimension of the embedding")
-    parser.add_argument("--test_every_n_epochs", type=int, default=2, help="Tests every N epochs")
+    parser.add_argument("--test_every_n_epochs", type=int, default=10, help="Tests every N epochs")
     parser.add_argument("--epochs", type=int, default=1, help="Epochs for each finetuning res: Total epochs = epochs * number of res")
     parser.add_argument("--pretrain_epochs", type=int, default=1, help="Epochs for pretraining")
     parser.add_argument("--output", type=str, default="./output", help="The output folder for training")
