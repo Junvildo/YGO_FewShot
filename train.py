@@ -79,8 +79,8 @@ def main(args):
 
     # Setup train and eval transformations
     train_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.RandomResizedCrop((args.img_size, args.img_size)),
+        # transforms.Resize((256, 256)),
+        transforms.Resize((args.img_size, args.img_size)),
         transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.3, 2.0), hue=.01, saturation=(0.5, 2.0)),
         transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0))], p=0.5),
         transforms.RandomAffine((1, 359), translate=(0, 0.3), scale=(1, 1.8), shear=(0.0, 0.8), fill=0),
