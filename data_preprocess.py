@@ -140,17 +140,18 @@ def extract_artwork(image, thresh_val=180, img_size=56):
     - img_size: Size to which the extracted artwork is resized (img_size x img_size).
     
     Returns:
-    - art: Resized artwork area extracted from the image.
+    - art: Resized artwork area extracted from the image, or None if no valid artwork is found.
     """
     # Convert to grayscale and equalize the histogram
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray_image = cv2.bilateralFilter(gray_image, 11, 17, 17)
     eq_image = cv2.equalizeHist(gray_image)
 
     # Threshold the equalized image
     _, binary_image = cv2.threshold(eq_image, thresh_val, 255, cv2.THRESH_BINARY)
 
     # Morphological operations to clean up noise
-    kernel = np.ones((3, 3), np.uint8)
+    kernel = np.ones((7, 7), np.uint8)
     eroded_image = cv2.erode(binary_image, kernel, iterations=3)
     dilated_image = cv2.dilate(eroded_image, kernel, iterations=3)
 
@@ -167,19 +168,70 @@ def extract_artwork(image, thresh_val=180, img_size=56):
             max_contour = contour
 
     # Define the bounding rectangle for the largest contour
+    if max_contour is None:
+        return None
     x, y, w, h = cv2.boundingRect(max_contour)
+    # print(image.shape[0], image.shape[1])
+    # print(x, y, w, h)
+    # if image.shape[0] > image.shape[1]:  # Portrait orientation
+    #     if (image.shape[0] - (y + h)) < y:
+    #         print("normal")
+    #         art = image[int((h * 4) * 0.2):y, x-1:x + int(w * 0.9)]
+    #     else:
+    #         print("180")
+    #         art = image[y + int(h * 0.9):int(((y + h) * 4) * 0.8), x-1:x + int(w * 0.9)]
+    # else:  # Landscape orientation
+    #     if x < (image.shape[1] // 2):
+    #         print("90")
+    #         art = image[y:y + int(h * 0.9), x + w:int((w * 4) * 0.8)]
+    #     else:
+    #         print("270")
+    #         art = image[y:y + h, int((w * 4) * 0.3):x]
+    art = None
+    # # Draw the bounding rectangle on the original image
+    # cv2.drawMarker(image, (x, y), (0, 0, 255), cv2.MARKER_STAR, 30, 2)
+    # cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    # # Display the image with the bounding rectangle
+    # cv2.imshow('Image with Bounding Rectangle', image)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
     if image.shape[0] > image.shape[1]:  # Portrait orientation
-        if (image.shape[0] - (y + h)) < y:
-            art = image[int((h * 4) * 0.2):y, x:x + w]
-        else:
-            art = image[y + h:int(((y + h) * 4) * 0.8), x:x + w]
+        # print("Portrait")
+        if y >= image.shape[0]//2 and x < image.shape[1]//2:
+            # print("normal")
+            #art = image[int((h * 4) * 0.2):y, x-1:x + int(w * 0.9)]
+            if w>=h*2 or h>=w*2:
+                art = image[y-h*2:y, x:x+w]
+            else:
+                art = image[y-h:y, x:x+w]
+        elif y < image.shape[0]//2 and x < image.shape[1]//2:
+            # print("180")
+            if w>=h*2 or h>=w*2:
+                art = image[y+h:y+int(h*3.5), x:x+w]
+            else:
+                art = image[y:y + h, x:x + w]
     else:  # Landscape orientation
-        if x < (image.shape[1] // 2):
-            art = image[y:y + h, x + w:int((w * 4) * 0.8)]
-        else:
-            art = image[y:y + h, int((w * 4) * 0.2):x]
+        # print("Landscape")
+        if y < image.shape[0]//2 and x < image.shape[1]//2:
+            # print("90")
+            if w>=h*2 or h>=w*2:
+                art = image[y:y + h, x+w:x+int(w*4)]
+            else:
+                art = image[y:y + h, x:x + w]
+        elif y < image.shape[0]//2 and x >= image.shape[1]//2:
+            # print("270")
+            if w>=h*2 or h>=w*2:
+                art = image[y:y + h, x-int(w*3):x]
+            else:
+                art = image[y:y + h, x:x + w]
 
     # Resize the extracted artwork
-    art = cv2.resize(art, (img_size, img_size))
+    if art is None or art.size == 0:
+        return None
+    else:
+        art = cv2.resize(art, (img_size, img_size))
 
     return art
+
