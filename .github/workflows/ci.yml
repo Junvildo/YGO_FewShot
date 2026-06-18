@@ -19,4 +19,4 @@ jobs:
         run: uv sync --locked --all-extras --dev
 
       - name: Run tests
-        run: uv run pytest test/
+        run: uv run pytest tests/
